@@ -3,25 +3,39 @@
 import scipy as sc
 import scipy.linalg as sclin
 import matplotlib.pyplot as plt
-from input_ham import import_out
+import input_ham
 
 fname='000AsP.input'
 N=100
-mu=3.0832*3.2
-mass=1. #3.2
+mu=9.8
+mass=1.0
 
 alatt=sc.array([3.96*sc.sqrt(2.),3.96*sc.sqrt(2.),13.02*0.5])
 k_list=[[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]]
-
 xlabel=['$\Gamma$','X','M','$\Gamma$']
 
+FSmesh=100
+eta=1.0e-1
+
+sw_inp=0
 spectrum=True
+sw_FS=True
 
 def get_ham(k):
     phase=sc.array([sc.sum(r*k) for r in rvec])
     expk=(sc.cos(phase)-1j*sc.sin(phase))/ndegen
     ham=sc.array([[sc.sum(hr*expk) for hr in hmr] for hmr in ham_r])
     return ham
+
+def gen_eig(ham,mass,mu,sw):
+    etmp=[sclin.eigh(h) for h in ham]
+    eigtmp=sc.array([eg[0] for eg in etmp])
+    if sw:
+        eig=eigtmp.T/mass-mu
+        uni=sc.array([eg[1] for eg in etmp]).T
+        return eig,uni
+    else:
+        return (eigtmp.max()/mass-mu),(eigtmp.min()/mass-mu)
 
 def mk_klist(k_list,N):
     klist=[]
@@ -57,14 +71,11 @@ def plot_band(eig,spl,xticks,uni):
     plt.show()
 
 def plot_spectrum(ham,klen,mu,de=100,eta0=5.e-2,smesh=200):
-    etmp=[sclin.eigh(h) for h in ham]
-    eigtmp=sc.array([eg[0] for eg in etmp])
-    emax=(eigtmp.max()-mu)*1.1
-    emin=(eigtmp.min()-mu)*1.1
-    w=sc.linspace(emin,emax,de)
+    emax,emin=gen_eig(ham,mass,mu,False)
+    w=sc.linspace(emin*1.1,emax*1.1,de)
     #eta=w*0+eta0
     etamax=4.0e0
-    eta=etamax*w*w/(emax*emax)+eta0
+    eta=etamax*w*w/min(emax*emax,emin*emin)+eta0
     G=sc.array([[-sclin.inv((ww+mu+et*1j)*sc.identity(no)-h) for h in ham] for ww,et in zip(w,eta)])
     trG=sc.array([[sc.trace(gg).imag/(no*no) for gg in g] for g in G])
     sp,w=sc.meshgrid(klen,w)
@@ -78,19 +89,58 @@ def plot_spectrum(ham,klen,mu,de=100,eta0=5.e-2,smesh=200):
     plt.xticks(xticks,xlabel)
     plt.show()
 
+def gen_ksq(mesh):
+    x=sc.linspace(-sc.pi,sc.pi,mesh)
+    sqmesh=mesh*mesh
+    X,Y=sc.meshgrid(x,x)
+    return sc.array([X.reshape(1,sqmesh),Y.reshape(1,sqmesh),Y.reshape(1,sqmesh)*0]).T,X,Y
+
+def plot_FS(eig,X,Y):
+    fig=plt.figure()
+    ax=fig.add_subplot(111,aspect='equal')
+    for en in eig:
+        plt.contour(X,Y,en.reshape(FSmesh,FSmesh),levels=[0.],c='black')
+    plt.show()
+
+def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
+    G=sc.array([-sclin.inv((0.+mu+eta*1j)*sc.identity(no)-h) for h in ham])
+    trG=sc.array([sc.trace(gg).imag/(no*no) for gg in G]).reshape(FSmesh,FSmesh)
+    #trG=sc.array([(gg[4,4]+gg[9,9]).imag/(no*no) for gg in G]).reshape(FSmesh,FSmesh)
+
+    fig=plt.figure()
+    ax=fig.add_subplot(111,aspect='equal')
+    ax.set_xticks([-sc.pi,0,sc.pi])
+    ax.set_xticklabels(['-$\pi$','0','$\pi$'])
+    ax.set_yticks([-sc.pi,0,sc.pi])
+    ax.set_yticklabels(['-$\pi$','0','$\pi$'])
+    cont=ax.contourf(X,Y,trG,smesh,cmap=plt.jet())
+    fig.colorbar(cont)
+    plt.show()
 
 if __name__=="__main__":
-    rvec,ndegen,ham_r,no,nr=import_out(fname,False)
-    klist,spa_length,xticks=mk_klist(k_list,N)
+    if sw_inp==0:
+        rvec,ndegen,ham_r,no,nr=input_ham.import_out(fname,False)
+    elif sw_inp==1:
+        rvec,ndegen,ham_r,no,nr=input_ham.import_hop(fname,True,False)
+    else:
+        rvec,ndegen,ham_r,no,nr,axis=input_ham.import_Hopping(False)
+
+    if sw_FS:
+        klist,X,Y=gen_ksq(FSmesh)
+    else:
+        klist,spa_length,xticks=mk_klist(k_list,N)
     ham=sc.array([get_ham(k) for k in klist])
     if spectrum:
-        plot_spectrum(ham,spa_length,mu)
+        if sw_FS:
+            plot_FSsp(ham,mu,X,Y,eta)
+        else:
+            plot_spectrum(ham,spa_length,mu,eta)
     else:
-        etmp=[sclin.eigh(h) for h in ham]
-        eigtmp=sc.array([eg[0] for eg in etmp])
-        eig=eigtmp.T/mass-mu
-        uni=sc.array([eg[1] for eg in etmp]).T
-        plot_band(eig,spa_length,xticks,uni)
+        eig,uni=gen_eig(ham,mass,mu,True)
+        if sw_FS:
+            plot_FS(eig,X,Y)
+        else:
+            plot_band(eig,spa_length,xticks,uni)
 
 __license__="""Copyright (c) 2018 K. Suzuki
 Released under the MIT license
