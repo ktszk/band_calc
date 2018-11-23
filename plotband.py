@@ -18,14 +18,28 @@ FSmesh=100
 eta=1.0e-1
 
 sw_inp=0
-spectrum=True
+spectrum=False
 sw_FS=True
+sw_plot_veloc=True
 
-def get_ham(k):
-    phase=sc.array([sc.sum(r*k) for r in rvec])
-    expk=(sc.cos(phase)-1j*sc.sin(phase))/ndegen
+def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
+    def gen_phase(k,rvec,ndegen):
+        phase=sc.array([sc.sum(r*k) for r in rvec])
+        expk=(sc.cos(phase)-1j*sc.sin(phase))/ndegen
+        return expk
+    expk=gen_phase(k,rvec,ndegen)
     ham=sc.array([[sc.sum(hr*expk) for hr in hmr] for hmr in ham_r])
-    return ham
+    if(out_phase):
+        return ham,expk
+    else:
+        return ham
+
+def get_vec(k,rvec,ham_r,ndegen):
+    ham,expk=get_ham(k,rvec,ham_r,ndegen,out_phase=True)
+    uni=sclin.eigh(ham)[1]
+    vec0=sc.array([[[sc.sum(-1j*r*hr*expk) for r in rvec.T] for hr in hmr] for hmr in ham_r])
+    vec=sc.array([sc.diag(sc.conjugate(uni.T).dot(v0.T).dot(uni))for v0 in vec0.T]).T
+    return vec
 
 def gen_eig(ham,mass,mu,sw):
     etmp=[sclin.eigh(h) for h in ham]
@@ -59,9 +73,8 @@ def mk_klist(k_list,N):
 def plot_band(eig,spl,xticks,uni):
     for e,cl in zip(eig,uni):
         clist=sc.array([abs(cl[0])*abs(cl[0]),
-                        0.5*(abs(cl[1])*abs(cl[1])
-                             +abs(cl[2])*abs(cl[2])),
-                        abs(cl[3])*abs(cl[3])]).T
+                        abs(cl[1])*abs(cl[1]),
+                        abs(cl[2])*abs(cl[2])]).T
         plt.scatter(spl,e,s=5,c=clist)
     for x in xticks[1:-1]:
         plt.axvline(x,ls='-',lw=0.25,color='black')
@@ -93,14 +106,25 @@ def gen_ksq(mesh):
     x=sc.linspace(-sc.pi,sc.pi,mesh)
     sqmesh=mesh*mesh
     X,Y=sc.meshgrid(x,x)
-    return sc.array([X.reshape(1,sqmesh),Y.reshape(1,sqmesh),Y.reshape(1,sqmesh)*0]).T,X,Y
+    return sc.array([X.reshape(1,sqmesh),Y.reshape(1,sqmesh)*0.0,Y.reshape(1,sqmesh)]).T,X,Y
 
 def plot_FS(eig,X,Y):
     fig=plt.figure()
     ax=fig.add_subplot(111,aspect='equal')
     for en in eig:
-        plt.contour(X,Y,en.reshape(FSmesh,FSmesh),levels=[0.],c='black')
+        if(en.max()*en.min()<0.0):
+            plt.contour(X,Y,en.reshape(FSmesh,FSmesh),levels=[0.],color='black')
     plt.show()
+
+def plot_vec(veloc,eig,X,Y):
+    fig=plt.figure()
+    ax=fig.add_subplot(111,aspect='equal')
+    for v,en in zip(veloc,eig):
+        plt.contourf(X,Y,v[2].reshape(FSmesh,FSmesh).real,100)
+        plt.colorbar()
+        if(en.max()*en.min()<0.0):
+            plt.contour(X,Y,en.reshape(FSmesh,FSmesh),levels=[0.])
+        plt.show()
 
 def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
     G=sc.array([-sclin.inv((0.+mu+eta*1j)*sc.identity(no)-h) for h in ham])
@@ -118,18 +142,22 @@ def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
     plt.show()
 
 if __name__=="__main__":
-    if sw_inp==0:
+    if sw_inp==0: #.input file
         rvec,ndegen,ham_r,no,nr=input_ham.import_out(fname,False)
-    elif sw_inp==1:
+    elif sw_inp==1: #rvec.txt, ham_r.txt, ndegen.txt files
         rvec,ndegen,ham_r,no,nr=input_ham.import_hop(fname,True,False)
-    else:
+    else: #Hopping.dat file
         rvec,ndegen,ham_r,no,nr,axis=input_ham.import_Hopping(False)
 
     if sw_FS:
         klist,X,Y=gen_ksq(FSmesh)
     else:
         klist,spa_length,xticks=mk_klist(k_list,N)
-    ham=sc.array([get_ham(k) for k in klist])
+    ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
+    if sw_plot_veloc:
+        veloc=sc.array([get_vec(k,rvec,ham_r,ndegen) for k in klist])
+        abs_veloc=sc.array([[sc.sqrt(sum(v**2)) for v in vv] for vv in veloc]).T
+        veloc=sc.array([get_vec(k,rvec,ham_r,ndegen).T for k in klist]).T
     if spectrum:
         if sw_FS:
             plot_FSsp(ham,mu,X,Y,eta)
@@ -138,7 +166,11 @@ if __name__=="__main__":
     else:
         eig,uni=gen_eig(ham,mass,mu,True)
         if sw_FS:
-            plot_FS(eig,X,Y)
+            if sw_plot_veloc:
+                plot_vec(veloc,eig,X,Y)
+                #plot_vec(abs_veloc,eig,X,Y)
+            else:
+                plot_FS(eig,X,Y)
         else:
             plot_band(eig,spa_length,xticks,uni)
 
