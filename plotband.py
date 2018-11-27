@@ -14,13 +14,15 @@ alatt=sc.array([3.96*sc.sqrt(2.),3.96*sc.sqrt(2.),13.02*0.5])
 k_list=[[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]]
 xlabel=['$\Gamma$','X','M','$\Gamma$']
 
-FSmesh=100
+sw_inp=0
+sw_bcc=False
+FSmesh=20
 eta=1.0e-1
 
-sw_inp=0
 spectrum=False
-sw_FS=True
+sw_FS=False
 sw_plot_veloc=True
+sw_3dfs=True
 
 def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     def gen_phase(k,rvec,ndegen):
@@ -37,8 +39,8 @@ def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
 def get_vec(k,rvec,ham_r,ndegen):
     ham,expk=get_ham(k,rvec,ham_r,ndegen,out_phase=True)
     uni=sclin.eigh(ham)[1]
-    vec0=sc.array([[[sc.sum(-1j*r*hr*expk) for r in rvec.T] for hr in hmr] for hmr in ham_r])
-    vec=sc.array([sc.diag(sc.conjugate(uni.T).dot(v0.T).dot(uni))for v0 in vec0.T]).T
+    vec0=sc.array([[[sc.sum(-1j*r*hr*expk)/a for a,r in zip(alatt,rvec.T)] for hr in hmr] for hmr in ham_r])
+    vec=sc.array([sc.diag(sc.conjugate(uni.T).dot(v0.T).dot(uni)) for v0 in vec0.T]).T
     return vec
 
 def gen_eig(ham,mass,mu,sw):
@@ -103,10 +105,57 @@ def plot_spectrum(ham,klen,mu,de=100,eta0=5.e-2,smesh=200):
     plt.show()
 
 def gen_ksq(mesh):
-    x=sc.linspace(-sc.pi,sc.pi,mesh)
+    x=sc.linspace(-sc.pi,sc.pi,mesh,True)
     sqmesh=mesh*mesh
     X,Y=sc.meshgrid(x,x)
     return sc.array([X.reshape(1,sqmesh),Y.reshape(1,sqmesh)*0.0,Y.reshape(1,sqmesh)]).T,X,Y
+
+def mk_kf(mesh,sw_bnum):
+    import skimage as sk
+    from mpl_toolkits.mplot3d import axes3d
+    km=sc.linspace(-sc.pi,sc.pi,mesh+1,True)
+    cumesh=(mesh+1)*(mesh+1)*(mesh+1)
+    x,y,z=sc.meshgrid(km,km,km)
+    klist=sc.array([x.reshape(1,cumesh),y.reshape(1,cumesh),z.reshape(1,cumesh)]).T
+    ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
+    eig,uni=gen_eig(ham,mass,mu,True)
+    v2=[]
+    if sw_bnum:
+        fsband=[]
+    for i,e in enumerate(eig):
+        if(e.max()*e.min() < 0. ):
+            vertices,faces,normals,values=sk.measure.marching_cubes_lewiner(e.reshape(mesh+1,mesh+1,mesh+1),0)
+            if sw_bnum:
+                fsband.append(i)
+                v2.append((vertices-mesh/2)*2*sc.pi/mesh)
+            else:
+                v2.extend(vertices)
+    if sw_bnum:
+        return v2,fsband
+    else:
+        return sc.array(v2)
+def gen_3d_fs_plot(mesh):
+    from mpl_toolkits.mplot3d import axes3d
+    vert=mk_kf(mesh,False)
+    x,y,z=zip(*vert-mesh/2)
+    fig=plt.figure()
+    ax=fig.add_subplot(111,projection='3d')
+    fs=ax.scatter(x,y,z,s=1.0)
+    plt.show()
+
+def plot_veloc_FS(vfs,kfs):
+    from mpl_toolkits.mplot3d import axes3d
+    fig=plt.figure()
+    ax=fig.add_subplot(111,projection='3d')
+    vf,kf=[],[]
+    for v,k in zip(vfs,kfs):
+        vf.extend(v)
+        kf.extend(k)
+    x,y,z=zip(*sc.array(kf))
+    ave=sc.array([sc.sqrt(abs(v[0])**2+abs(v[1])**2) for v in vf])
+    fs=ax.scatter(x,y,z,c=ave)
+    plt.colorbar(fs)
+    plt.show()
 
 def plot_FS(eig,X,Y):
     fig=plt.figure()
@@ -146,33 +195,47 @@ if __name__=="__main__":
         rvec,ndegen,ham_r,no,nr=input_ham.import_out(fname,False)
     elif sw_inp==1: #rvec.txt, ham_r.txt, ndegen.txt files
         rvec,ndegen,ham_r,no,nr=input_ham.import_hop(fname,True,False)
+    elif sw_inp==2: #case_hr.dat file
+        rvec,ndegen,ham_r,no,nr=input_ham.import_hr(fname,False)
     else: #Hopping.dat file
         rvec,ndegen,ham_r,no,nr,axis=input_ham.import_Hopping(False)
 
-    if sw_FS:
-        klist,X,Y=gen_ksq(FSmesh)
-    else:
-        klist,spa_length,xticks=mk_klist(k_list,N)
-    ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
-    if sw_plot_veloc:
-        veloc=sc.array([get_vec(k,rvec,ham_r,ndegen) for k in klist])
-        abs_veloc=sc.array([[sc.sqrt(sum(v**2)) for v in vv] for vv in veloc]).T
-        veloc=sc.array([get_vec(k,rvec,ham_r,ndegen).T for k in klist]).T
-    if spectrum:
-        if sw_FS:
-            plot_FSsp(ham,mu,X,Y,eta)
+    if sw_bcc: #transform to Cartesian axis
+        tm=sc.array([[.5,.5,-.5],[-.5,.5,-.5],[.5,.5,.5]])
+        rvec1=sc.array([tm.dot(r) for r in rvec])
+        rvec=rvec1
+    if sw_3dfs:
+        if sw_plot_veloc:
+            klist,blist=mk_kf(FSmesh,True)
+            veloc=[[get_vec(k,rvec,ham_r,ndegen)[b] for k in kk] for b,kk in zip(blist,klist)]
+            plot_veloc_FS(veloc,klist)
         else:
-            plot_spectrum(ham,spa_length,mu,eta)
+            gen_3d_fs_plot(FSmesh)
     else:
-        eig,uni=gen_eig(ham,mass,mu,True)
         if sw_FS:
-            if sw_plot_veloc:
-                plot_vec(veloc,eig,X,Y)
-                #plot_vec(abs_veloc,eig,X,Y)
+            klist,X,Y=gen_ksq(FSmesh)
+        else:
+            klist,spa_length,xticks=mk_klist(k_list,N)
+        ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
+        if sw_plot_veloc:
+            veloc=sc.array([get_vec(k,rvec,ham_r,ndegen) for k in klist])
+            abs_veloc=sc.array([[sc.sqrt(sum(v**2)) for v in vv] for vv in veloc]).T
+            veloc=sc.array([get_vec(k,rvec,ham_r,ndegen).T for k in klist]).T
+        if spectrum:
+            if sw_FS:
+                plot_FSsp(ham,mu,X,Y,eta)
             else:
-                plot_FS(eig,X,Y)
+                plot_spectrum(ham,spa_length,mu,eta)
         else:
-            plot_band(eig,spa_length,xticks,uni)
+            eig,uni=gen_eig(ham,mass,mu,True)
+            if sw_FS:
+                if sw_plot_veloc:
+                    plot_vec(veloc,eig,X,Y)
+                    #plot_vec(abs_veloc,eig,X,Y)
+                else:
+                    plot_FS(eig,X,Y)
+            else:
+                plot_band(eig,spa_length,xticks,uni)
 
 __license__="""Copyright (c) 2018 K. Suzuki
 Released under the MIT license
