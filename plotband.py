@@ -16,12 +16,12 @@ xlabel=['$\Gamma$','X','M','$\Gamma$']
 
 sw_inp=0
 sw_bcc=False
-FSmesh=20
+FSmesh=40
 eta=1.0e-1
 
 spectrum=False
 sw_FS=False
-sw_plot_veloc=True
+sw_plot_veloc=False
 sw_3dfs=True
 
 def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
@@ -39,7 +39,7 @@ def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
 def get_vec(k,rvec,ham_r,ndegen):
     ham,expk=get_ham(k,rvec,ham_r,ndegen,out_phase=True)
     uni=sclin.eigh(ham)[1]
-    vec0=sc.array([[[sc.sum(-1j*r*hr*expk)/a for a,r in zip(alatt,rvec.T)] for hr in hmr] for hmr in ham_r])
+    vec0=sc.array([[[sc.sum(-1j*r*hr*expk) for r in rvec.T] for hr in hmr] for hmr in ham_r])
     vec=sc.array([sc.diag(sc.conjugate(uni.T).dot(v0.T).dot(uni)) for v0 in vec0.T]).T
     return vec
 
@@ -119,7 +119,7 @@ def mk_kf(mesh,sw_bnum):
     klist=sc.array([x.reshape(1,cumesh),y.reshape(1,cumesh),z.reshape(1,cumesh)]).T
     ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
     eig,uni=gen_eig(ham,mass,mu,True)
-    v2=[]
+    v2,v3=[],[]
     if sw_bnum:
         fsband=[]
     for i,e in enumerate(eig):
@@ -128,32 +128,45 @@ def mk_kf(mesh,sw_bnum):
             if sw_bnum:
                 fsband.append(i)
                 v2.append((vertices-mesh/2)*2*sc.pi/mesh)
+                v3.append(faces)
             else:
-                v2.extend(vertices)
+                v3.extend((vertices-mesh/2)[faces])
     if sw_bnum:
-        return v2,fsband
+        return v2,fsband,v3
     else:
-        return sc.array(v2)
+        return sc.array(v3)
 def gen_3d_fs_plot(mesh):
     from mpl_toolkits.mplot3d import axes3d
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
     vert=mk_kf(mesh,False)
-    x,y,z=zip(*vert-mesh/2)
     fig=plt.figure()
     ax=fig.add_subplot(111,projection='3d')
-    fs=ax.scatter(x,y,z,s=1.0)
+    m = Poly3DCollection(vert)
+    ax.add_collection3d(m)
+    ax.set_xlim(-mesh/2, mesh/2)
+    ax.set_ylim(-mesh/2, mesh/2)
+    ax.set_zlim(-mesh/2, mesh/2)
+    plt.tight_layout()
     plt.show()
 
-def plot_veloc_FS(vfs,kfs):
+def plot_veloc_FS(vfs,kfs,faces):
     from mpl_toolkits.mplot3d import axes3d
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
     fig=plt.figure()
     ax=fig.add_subplot(111,projection='3d')
     vf,kf=[],[]
-    for v,k in zip(vfs,kfs):
+    for v,k,fc in zip(vfs,kfs,faces):
         vf.extend(v)
-        kf.extend(k)
+        kf.extend(k) #[fc])
     x,y,z=zip(*sc.array(kf))
-    ave=sc.array([sc.sqrt(abs(v[0])**2+abs(v[1])**2) for v in vf])
+    ave=sc.array([abs(v[0]) for v in vf])
     fs=ax.scatter(x,y,z,c=ave)
+    #fs = Poly3DCollection(kf,facecolors=ave)
+    ax.add_collection3d(fs)
+    ax.set_xlim(-FSmesh/2, FSmesh/2)
+    ax.set_ylim(-FSmesh/2, FSmesh/2)
+    ax.set_zlim(-FSmesh/2, FSmesh/2)
+    #plt.tight_layout()
     plt.colorbar(fs)
     plt.show()
 
@@ -206,9 +219,9 @@ if __name__=="__main__":
         rvec=rvec1
     if sw_3dfs:
         if sw_plot_veloc:
-            klist,blist=mk_kf(FSmesh,True)
+            klist,blist,faces=mk_kf(FSmesh,True)
             veloc=[[get_vec(k,rvec,ham_r,ndegen)[b] for k in kk] for b,kk in zip(blist,klist)]
-            plot_veloc_FS(veloc,klist)
+            plot_veloc_FS(veloc,klist,faces)
         else:
             gen_3d_fs_plot(FSmesh)
     else:
