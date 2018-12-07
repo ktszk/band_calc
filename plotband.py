@@ -2,6 +2,7 @@
 #-*- coding:utf-8 -*-
 import scipy as sc
 import scipy.linalg as sclin
+import scipy.constants as scconst
 import matplotlib.pyplot as plt
 import input_ham
 
@@ -10,19 +11,20 @@ N=100
 mu=9.8
 mass=1.0
 
-alatt=sc.array([3.96*sc.sqrt(2.),3.96*sc.sqrt(2.),13.02*0.5])
+alatt=sc.array([3.96,3.96,13.02])
 k_list=[[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]]
 xlabel=['$\Gamma$','X','M','$\Gamma$']
 
-sw_inp=0
-sw_bcc=False
-FSmesh=40
+FSmesh=20
 eta=1.0e-1
 
+sw_inp=0
 spectrum=False
-sw_FS=False
-sw_plot_veloc=False
-sw_3dfs=True
+sw_FS=True
+sw_plot_veloc=True
+
+sw_3dfs=False
+sw_bcc=False
 
 def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     def gen_phase(k,rvec,ndegen):
@@ -37,9 +39,11 @@ def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
         return ham
 
 def get_vec(k,rvec,ham_r,ndegen):
+    hbar=scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e10
     ham,expk=get_ham(k,rvec,ham_r,ndegen,out_phase=True)
     uni=sclin.eigh(ham)[1]
-    vec0=sc.array([[[sc.sum(-1j*r*hr*expk) for r in rvec.T] for hr in hmr] for hmr in ham_r])
+    vec0=sc.array([[[-1j*a*sc.sum(r*hr*expk)/hbar 
+                      for a,r in zip(alatt,rvec.T)] for hr in hmr] for hmr in ham_r])
     vec=sc.array([sc.diag(sc.conjugate(uni.T).dot(v0.T).dot(uni)) for v0 in vec0.T]).T
     return vec
 
@@ -108,9 +112,9 @@ def gen_ksq(mesh):
     x=sc.linspace(-sc.pi,sc.pi,mesh,True)
     sqmesh=mesh*mesh
     X,Y=sc.meshgrid(x,x)
-    return sc.array([X.reshape(1,sqmesh),Y.reshape(1,sqmesh)*0.0,Y.reshape(1,sqmesh)]).T,X,Y
+    return sc.array([X.reshape(1,sqmesh),Y.reshape(1,sqmesh),Y.reshape(1,sqmesh)*0.0]).T,X,Y
 
-def mk_kf(mesh,sw_bnum):
+def mk_kf3d(mesh,sw_bnum):
     import skimage as sk
     from mpl_toolkits.mplot3d import axes3d
     km=sc.linspace(-sc.pi,sc.pi,mesh+1,True)
@@ -119,7 +123,7 @@ def mk_kf(mesh,sw_bnum):
     klist=sc.array([x.reshape(1,cumesh),y.reshape(1,cumesh),z.reshape(1,cumesh)]).T
     ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
     eig,uni=gen_eig(ham,mass,mu,True)
-    v2,v3=[],[]
+    v2=[]
     if sw_bnum:
         fsband=[]
     for i,e in enumerate(eig):
@@ -128,46 +132,73 @@ def mk_kf(mesh,sw_bnum):
             if sw_bnum:
                 fsband.append(i)
                 v2.append((vertices-mesh/2)*2*sc.pi/mesh)
-                v3.append(faces)
             else:
-                v3.extend((vertices-mesh/2)[faces])
+                v2.extend(vertices)
     if sw_bnum:
-        return v2,fsband,v3
+        return v2,fsband
     else:
-        return sc.array(v3)
+        return sc.array(v2)
+
+def mk_kf2d(mesh,sw_bnum):
+    import skimage as sk
+    from mpl_toolkits.mplot3d import axes3d
+    km=sc.linspace(-sc.pi,sc.pi,mesh+1,True)
+    sqmesh=(mesh+1)*(mesh+1)
+    x,y=sc.meshgrid(km,km)
+    klist=sc.array([x.reshape(1,sqmesh),y.reshape(1,sqmesh),y.reshape(1,sqmesh)*0.0]).T
+    ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
+    eig,uni=gen_eig(ham,mass,mu,True)
+    v2=[]
+    if sw_bnum:
+        fsband=[]
+    for i,e in enumerate(eig):
+        if(e.max()*e.min() < 0. ):
+            cont=sk.measure.find_contours(e.reshape(mesh+1,mesh+1),0)
+            ct0=[]
+            for c in cont:
+                ct0.extend(c)
+            if sw_bnum:
+                fsband.append(i)
+                ct=(sc.array([[c[0],c[1],0] for c in ct0])-mesh/2)*2*sc.pi/mesh
+                v2.append(ct)
+            else:
+                v2.extend(ct)
+    if sw_bnum:
+        return v2,fsband
+    else:
+        return sc.array(v2)
+
 def gen_3d_fs_plot(mesh):
     from mpl_toolkits.mplot3d import axes3d
-    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
     vert=mk_kf(mesh,False)
+    x,y,z=zip(*vert-mesh/2)
     fig=plt.figure()
     ax=fig.add_subplot(111,projection='3d')
-    m = Poly3DCollection(vert)
-    ax.add_collection3d(m)
-    ax.set_xlim(-mesh/2, mesh/2)
-    ax.set_ylim(-mesh/2, mesh/2)
-    ax.set_zlim(-mesh/2, mesh/2)
-    plt.tight_layout()
+    fs=ax.scatter(x,y,z,s=1.0)
     plt.show()
 
-def plot_veloc_FS(vfs,kfs,faces):
+def plot_veloc_FS(vfs,kfs):
     from mpl_toolkits.mplot3d import axes3d
-    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
     fig=plt.figure()
     ax=fig.add_subplot(111,projection='3d')
     vf,kf=[],[]
-    for v,k,fc in zip(vfs,kfs,faces):
+    for v,k in zip(vfs,kfs):
         vf.extend(v)
-        kf.extend(k) #[fc])
+        kf.extend(k)
     x,y,z=zip(*sc.array(kf))
-    ave=sc.array([abs(v[0]) for v in vf])
+    ave=sc.array([sum(abs(v)) for v in vf])
     fs=ax.scatter(x,y,z,c=ave)
-    #fs = Poly3DCollection(kf,facecolors=ave)
-    ax.add_collection3d(fs)
-    ax.set_xlim(-FSmesh/2, FSmesh/2)
-    ax.set_ylim(-FSmesh/2, FSmesh/2)
-    ax.set_zlim(-FSmesh/2, FSmesh/2)
-    #plt.tight_layout()
     plt.colorbar(fs)
+    plt.show()
+
+def plot_vec2(veloc,klist):
+    for vv,kk in zip(veloc,klist):
+        v=sc.array([sc.sqrt(sum(abs(v0)*abs(v0))) for v0 in vv])
+        plt.scatter(kk[:,0],kk[:,1],s=1.0,c=v)
+    plt.jet()
+    plt.xlim(-sc.pi,sc.pi)
+    plt.ylim(-sc.pi,sc.pi)
+    plt.colorbar(format='%.3e')
     plt.show()
 
 def plot_FS(eig,X,Y):
@@ -182,7 +213,7 @@ def plot_vec(veloc,eig,X,Y):
     fig=plt.figure()
     ax=fig.add_subplot(111,aspect='equal')
     for v,en in zip(veloc,eig):
-        plt.contourf(X,Y,v[2].reshape(FSmesh,FSmesh).real,100)
+        plt.contourf(X,Y,v.reshape(FSmesh,FSmesh).real,100)
         plt.colorbar()
         if(en.max()*en.min()<0.0):
             plt.contour(X,Y,en.reshape(FSmesh,FSmesh),levels=[0.])
@@ -208,32 +239,38 @@ if __name__=="__main__":
         rvec,ndegen,ham_r,no,nr=input_ham.import_out(fname,False)
     elif sw_inp==1: #rvec.txt, ham_r.txt, ndegen.txt files
         rvec,ndegen,ham_r,no,nr=input_ham.import_hop(fname,True,False)
-    elif sw_inp==2: #case_hr.dat file
+    elif sw_inp==2:
         rvec,ndegen,ham_r,no,nr=input_ham.import_hr(fname,False)
     else: #Hopping.dat file
         rvec,ndegen,ham_r,no,nr,axis=input_ham.import_Hopping(False)
 
-    if sw_bcc: #transform to Cartesian axis
+    if sw_bcc:
         tm=sc.array([[.5,.5,-.5],[-.5,.5,-.5],[.5,.5,.5]])
         rvec1=sc.array([tm.dot(r) for r in rvec])
         rvec=rvec1
     if sw_3dfs:
         if sw_plot_veloc:
-            klist,blist,faces=mk_kf(FSmesh,True)
-            veloc=[[get_vec(k,rvec,ham_r,ndegen)[b] for k in kk] for b,kk in zip(blist,klist)]
-            plot_veloc_FS(veloc,klist,faces)
+            klist,blist=mk_kf3d(FSmesh,True)
+            veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
+            plot_veloc_FS(veloc,klist)
         else:
             gen_3d_fs_plot(FSmesh)
     else:
         if sw_FS:
-            klist,X,Y=gen_ksq(FSmesh)
+            if sw_plot_veloc:
+                klist,blist=mk_kf2d(FSmesh,True)
+            else:
+                klist,X,Y=gen_ksq(FSmesh)
         else:
             klist,spa_length,xticks=mk_klist(k_list,N)
         ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
         if sw_plot_veloc:
-            veloc=sc.array([get_vec(k,rvec,ham_r,ndegen) for k in klist])
-            abs_veloc=sc.array([[sc.sqrt(sum(v**2)) for v in vv] for vv in veloc]).T
-            veloc=sc.array([get_vec(k,rvec,ham_r,ndegen).T for k in klist]).T
+            if sw_FS:
+                veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
+            else:
+                veloc=sc.array([get_vec(k,rvec,ham_r,ndegen) for k in klist])
+                abs_veloc=sc.array([[sc.sqrt(sum(v**2)) for v in vv] for vv in veloc]).T
+                veloc=sc.array([get_vec(k,rvec,ham_r,ndegen).T for k in klist]).T
         if spectrum:
             if sw_FS:
                 plot_FSsp(ham,mu,X,Y,eta)
@@ -243,8 +280,9 @@ if __name__=="__main__":
             eig,uni=gen_eig(ham,mass,mu,True)
             if sw_FS:
                 if sw_plot_veloc:
-                    plot_vec(veloc,eig,X,Y)
+                    #plot_vec(veloc,eig,X,Y)
                     #plot_vec(abs_veloc,eig,X,Y)
+                    plot_vec2(veloc,klist)
                 else:
                     plot_FS(eig,X,Y)
             else:
