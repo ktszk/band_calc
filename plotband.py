@@ -11,18 +11,20 @@ N=100
 mu=9.8
 mass=1.0
 
-alatt=sc.array([3.96,3.96,13.02])
+alatt=sc.array([3.96*sc.sqrt(2.),3.96*sc.sqrt(2.),13.02*0.5])
 k_list=[[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]]
 xlabel=['$\Gamma$','X','M','$\Gamma$']
 
-FSmesh=20
+olist=[1,2,3]
+FSmesh=200
 eta=1.0e-1
 
 sw_inp=0
 spectrum=False
 sw_FS=True
-sw_plot_veloc=True
+sw_plot_veloc=False
 
+sw_color=True
 sw_3dfs=False
 sw_bcc=False
 
@@ -57,6 +59,10 @@ def gen_eig(ham,mass,mu,sw):
     else:
         return (eigtmp.max()/mass-mu),(eigtmp.min()/mass-mu)
 
+def gen_uni(ham,blist):
+    uni=sc.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham,blist)])
+    return uni
+
 def mk_klist(k_list,N):
     klist=[]
     splen=[]
@@ -76,11 +82,11 @@ def mk_klist(k_list,N):
     xticks=xticks+[splen[-1]]
     return sc.array(klist),sc.array(splen),xticks
 
-def plot_band(eig,spl,xticks,uni):
+def plot_band(eig,spl,xticks,uni,ol):
     for e,cl in zip(eig,uni):
-        clist=sc.array([abs(cl[0])*abs(cl[0]),
-                        abs(cl[1])*abs(cl[1]),
-                        abs(cl[2])*abs(cl[2])]).T
+        clist=sc.array([sc.round_(abs(cl[ol[0]])*abs(cl[ol[0]]),4),
+                        sc.round_(abs(cl[ol[1]])*abs(cl[ol[1]]),4),
+                        sc.round_(abs(cl[ol[2]])*abs(cl[ol[2]]),4)]).T
         plt.scatter(spl,e,s=5,c=clist)
     for x in xticks[1:-1]:
         plt.axvline(x,ls='-',lw=0.25,color='black')
@@ -157,9 +163,9 @@ def mk_kf2d(mesh,sw_bnum):
             ct0=[]
             for c in cont:
                 ct0.extend(c)
+            ct=(sc.array([[c[0],c[1],mesh/2] for c in ct0])-mesh/2)*2*sc.pi/mesh
             if sw_bnum:
                 fsband.append(i)
-                ct=(sc.array([[c[0],c[1],0] for c in ct0])-mesh/2)*2*sc.pi/mesh
                 v2.append(ct)
             else:
                 v2.extend(ct)
@@ -198,15 +204,28 @@ def plot_vec2(veloc,klist):
     plt.jet()
     plt.xlim(-sc.pi,sc.pi)
     plt.ylim(-sc.pi,sc.pi)
+    plt.xticks([-sc.pi,0,sc.pi],['-$\pi$','0','$\pi$'])
+    plt.yticks([-sc.pi,0,sc.pi],['-$\pi$','0','$\pi$'])
     plt.colorbar(format='%.3e')
     plt.show()
 
-def plot_FS(eig,X,Y):
+def plot_FS(uni,klist,ol,eig,X,Y,sw_color):
     fig=plt.figure()
     ax=fig.add_subplot(111,aspect='equal')
-    for en in eig:
-        if(en.max()*en.min()<0.0):
-            plt.contour(X,Y,en.reshape(FSmesh,FSmesh),levels=[0.],color='black')
+    if sw_color:
+        for kk,cl in zip(klist,uni):
+            clist=sc.array([[round(abs(c[ol[0]])*abs(c[ol[0]]),4),
+                             round(abs(c[ol[1]])*abs(c[ol[1]]),4),
+                             round(abs(c[ol[2]])*abs(c[ol[2]]),4)] for c in cl])
+            plt.scatter(kk[:,0],kk[:,1],s=1.0,c=clist)
+    else:
+        for en in eig:
+            if(en.max()*en.min()<0.0):
+                plt.contour(X,Y,en.reshape(FSmesh,FSmesh),levels=[0.],color='black')
+    plt.xlim(-sc.pi,sc.pi)
+    plt.ylim(-sc.pi,sc.pi)
+    plt.xticks([-sc.pi,0,sc.pi],['-$\pi$','0','$\pi$'])
+    plt.yticks([-sc.pi,0,sc.pi],['-$\pi$','0','$\pi$'])
     plt.show()
 
 def plot_vec(veloc,eig,X,Y):
@@ -261,9 +280,10 @@ if __name__=="__main__":
                 klist,blist=mk_kf2d(FSmesh,True)
             else:
                 klist,X,Y=gen_ksq(FSmesh)
+                klist1,blist=mk_kf2d(FSmesh,True)
+                ham1=sc.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
         else:
             klist,spa_length,xticks=mk_klist(k_list,N)
-        ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
         if sw_plot_veloc:
             if sw_FS:
                 veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
@@ -271,22 +291,24 @@ if __name__=="__main__":
                 veloc=sc.array([get_vec(k,rvec,ham_r,ndegen) for k in klist])
                 abs_veloc=sc.array([[sc.sqrt(sum(v**2)) for v in vv] for vv in veloc]).T
                 veloc=sc.array([get_vec(k,rvec,ham_r,ndegen).T for k in klist]).T
+        else:
+            ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
         if spectrum:
             if sw_FS:
                 plot_FSsp(ham,mu,X,Y,eta)
             else:
                 plot_spectrum(ham,spa_length,mu,eta)
         else:
-            eig,uni=gen_eig(ham,mass,mu,True)
             if sw_FS:
                 if sw_plot_veloc:
-                    #plot_vec(veloc,eig,X,Y)
-                    #plot_vec(abs_veloc,eig,X,Y)
                     plot_vec2(veloc,klist)
                 else:
-                    plot_FS(eig,X,Y)
+                    eig,uni=gen_eig(ham,mass,mu,True)
+                    uni=gen_uni(ham1,blist)
+                    plot_FS(uni,klist1,olist,eig,X,Y,sw_color)
             else:
-                plot_band(eig,spa_length,xticks,uni)
+                eig,uni=gen_eig(ham,mass,mu,True)
+                plot_band(eig,spa_length,xticks,uni,olist)
 
 __license__="""Copyright (c) 2018 K. Suzuki
 Released under the MIT license
