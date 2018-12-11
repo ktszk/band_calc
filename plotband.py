@@ -12,6 +12,7 @@ mu=9.8
 mass=1.0
 
 alatt=sc.array([3.96*sc.sqrt(2.),3.96*sc.sqrt(2.),13.02*0.5])
+Arot=sc.array([[ .5,-.5, .5],[ .5, .5, .5],[-.5,-.5, .5]])
 k_list=[[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]]
 xlabel=['$\Gamma$','X','M','$\Gamma$']
 
@@ -26,7 +27,7 @@ sw_plot_veloc=True
 
 sw_color=True
 sw_3dfs=False
-sw_bcc=False
+sw_dec_axis=False
 
 def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     def gen_phase(k,rvec,ndegen):
@@ -269,9 +270,8 @@ if __name__=="__main__":
     else: #Hopping.dat file
         rvec,ndegen,ham_r,no,nr,axis=input_ham.import_Hopping(False)
 
-    if sw_bcc:
-        tm=sc.array([[.5,.5,-.5],[-.5,.5,-.5],[.5,.5,.5]])
-        rvec1=sc.array([tm.dot(r) for r in rvec])
+    if sw_dec_axis:
+        rvec1=sc.array([Arot.T.dot(r) for r in rvec])
         rvec=rvec1
     if sw_3dfs:
         if sw_plot_veloc:
