@@ -22,7 +22,7 @@ eta=1.0e-1
 sw_inp=0
 spectrum=False
 sw_FS=True
-sw_plot_veloc=False
+sw_plot_veloc=True
 
 sw_color=True
 sw_3dfs=False
@@ -198,9 +198,15 @@ def plot_veloc_FS(vfs,kfs):
     plt.show()
 
 def plot_vec2(veloc,klist):
+    v=[]
+    k=[]
     for vv,kk in zip(veloc,klist):
-        v=sc.array([sc.sqrt(sum(abs(v0)*abs(v0))) for v0 in vv])
-        plt.scatter(kk[:,0],kk[:,1],s=1.0,c=v)
+        v0=sc.array([sc.sqrt(sum(abs(v0)*abs(v0))) for v0 in vv])
+        v.extend(v0)
+        k.extend(kk)
+    v=sc.array(v)
+    k=sc.array(k)
+    plt.scatter(k[:,0],k[:,1],s=1.0,c=v)
     plt.jet()
     plt.xlim(-sc.pi,sc.pi)
     plt.ylim(-sc.pi,sc.pi)
