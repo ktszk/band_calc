@@ -4,6 +4,7 @@ import scipy as sc
 import scipy.linalg as sclin
 import scipy.constants as scconst
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 import input_ham
 
 fname='000AsP.input'
@@ -18,12 +19,12 @@ xlabel=['$\Gamma$','X','M','$\Gamma$']
 olist=[0,2,3]
 
 N=100
-FSmesh=20
+FSmesh=100
 eta=1.0e-1
 sw_dec_axis=False #transform Cartesian axis
 sw_color=True #plot band or FS with orbital weight
 
-option=2
+option=6
 """
 option: switch calculation modes
 0:band plot
@@ -152,7 +153,7 @@ def mk_kf3d(mesh,sw_bnum):
                 v2.append((vertices-mesh/2)*2*sc.pi/mesh)
                 #v3.append(faces)
             else:
-                v2.extend((vertices-mesh/2)[faces])
+                v2.extend((2*sc.pi*(vertices-mesh/2)/mesh)[faces])
     if sw_bnum:
         return v2,fsband
     else:
@@ -197,9 +198,9 @@ def gen_3d_fs_plot(mesh):
     #fs=ax.scatter(x,y,z,s=1.0)
     m = Poly3DCollection(vert)
     ax.add_collection3d(m)
-    ax.set_xlim(-mesh/2, mesh/2)
-    ax.set_ylim(-mesh/2, mesh/2)
-    ax.set_zlim(-mesh/2, mesh/2)
+    ax.set_xlim(-sc.pi, sc.pi)
+    ax.set_ylim(-sc.pi, sc.pi)
+    ax.set_zlim(-sc.pi, sc.pi)
     plt.tight_layout()
     plt.show()
 
@@ -209,15 +210,24 @@ def plot_veloc_FS(vfs,kfs):
     ax=fig.add_subplot(111,projection='3d')
     vf,kf=[],[]
     for v,k in zip(vfs,kfs):
+        ave_vx=sum(abs(sc.array(v).T[0]))/len(v)
+        ave_vy=sum(abs(sc.array(v).T[1]))/len(v)
+        ave_vz=sum(abs(sc.array(v).T[2]))/len(v)
+        print '%.3e %.3e %.3e'%(ave_vx,ave_vy,ave_vz)
         vf.extend(v)
         kf.extend(k)
     x,y,z=zip(*sc.array(kf))
+    vf=sc.array(vf)
+    ave_vx=sum(abs(vf.T[0]))/len(vf)
+    ave_vy=sum(abs(vf.T[1]))/len(vf)
+    ave_vz=sum(abs(vf.T[2]))/len(vf)
+    print '%.3e %.3e %.3e'%(ave_vx,ave_vy,ave_vz)
     ave=sc.array([sum(abs(v)) for v in vf])
-    fs=ax.scatter(x,y,z,c=ave)
-    ax.set_xlim(-mesh/2, mesh/2)
-    ax.set_ylim(-mesh/2, mesh/2)
-    ax.set_zlim(-mesh/2, mesh/2)
-    plt.colorbar(fs)
+    fs=ax.scatter(x,y,z,c=ave,cmap=cm.jet)
+    ax.set_xlim(-sc.pi, sc.pi)
+    ax.set_ylim(-sc.pi, sc.pi)
+    ax.set_zlim(-sc.pi, sc.pi)
+    plt.colorbar(fs,format='%.2e')
     plt.show()
 
 def plot_vec2(veloc,klist):
@@ -235,7 +245,7 @@ def plot_vec2(veloc,klist):
     plt.ylim(-sc.pi,sc.pi)
     plt.xticks([-sc.pi,0,sc.pi],['-$\pi$','0','$\pi$'])
     plt.yticks([-sc.pi,0,sc.pi],['-$\pi$','0','$\pi$'])
-    plt.colorbar(format='%.3e')
+    plt.colorbar(format='%.2e')
     plt.show()
 
 def plot_FS(uni,klist,ol,eig,X,Y,sw_color):
