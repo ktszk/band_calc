@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import input_ham
 
 fname='000AsP.input'
-N=100
+sw_inp=0
 mu=9.8
 mass=1.0
 
@@ -15,19 +15,30 @@ alatt=sc.array([3.96*sc.sqrt(2.),3.96*sc.sqrt(2.),13.02*0.5])
 Arot=sc.array([[ .5,-.5, .5],[ .5, .5, .5],[-.5,-.5, .5]])
 k_list=[[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]]
 xlabel=['$\Gamma$','X','M','$\Gamma$']
+olist=[0,2,3]
 
-olist=[1,2,3]
-FSmesh=200
+N=100
+FSmesh=20
 eta=1.0e-1
+sw_dec_axis=False #transform Cartesian axis
+sw_color=True #plot band or FS with orbital weight
 
-sw_inp=0
-spectrum=False
-sw_FS=True
-sw_plot_veloc=True
+option=2
+"""
+option: switch calculation modes
+0:band plot
+1: write Fermi surface at kz=0
+2: write 3D Fermi surface
+3: write Fermi velocity with Fermi surface
+4: plot spectrum like band plot
+5: plot spectrum at E=EF
+6: plot 3D Fermi velocity with Fermi surface
+"""
 
-sw_color=True
-sw_3dfs=False
-sw_dec_axis=False
+spectrum=(True if option in (4,5) else False)
+sw_FS=(True if option in (1,3,5) else False)
+sw_plot_veloc=(True if option in (3,6) else False)
+sw_3dfs=(True if option in (2,6) else False)
 
 def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     def gen_phase(k,rvec,ndegen):
@@ -139,8 +150,9 @@ def mk_kf3d(mesh,sw_bnum):
             if sw_bnum:
                 fsband.append(i)
                 v2.append((vertices-mesh/2)*2*sc.pi/mesh)
+                #v3.append(faces)
             else:
-                v2.extend(vertices)
+                v2.extend((vertices-mesh/2)[faces])
     if sw_bnum:
         return v2,fsband
     else:
@@ -177,11 +189,18 @@ def mk_kf2d(mesh,sw_bnum):
 
 def gen_3d_fs_plot(mesh):
     from mpl_toolkits.mplot3d import axes3d
-    vert=mk_kf(mesh,False)
-    x,y,z=zip(*vert-mesh/2)
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+    vert=mk_kf3d(mesh,False)
     fig=plt.figure()
     ax=fig.add_subplot(111,projection='3d')
-    fs=ax.scatter(x,y,z,s=1.0)
+    #x,y,z=zip(*vert-mesh/2)
+    #fs=ax.scatter(x,y,z,s=1.0)
+    m = Poly3DCollection(vert)
+    ax.add_collection3d(m)
+    ax.set_xlim(-mesh/2, mesh/2)
+    ax.set_ylim(-mesh/2, mesh/2)
+    ax.set_zlim(-mesh/2, mesh/2)
+    plt.tight_layout()
     plt.show()
 
 def plot_veloc_FS(vfs,kfs):
@@ -195,6 +214,9 @@ def plot_veloc_FS(vfs,kfs):
     x,y,z=zip(*sc.array(kf))
     ave=sc.array([sum(abs(v)) for v in vf])
     fs=ax.scatter(x,y,z,c=ave)
+    ax.set_xlim(-mesh/2, mesh/2)
+    ax.set_ylim(-mesh/2, mesh/2)
+    ax.set_zlim(-mesh/2, mesh/2)
     plt.colorbar(fs)
     plt.show()
 
