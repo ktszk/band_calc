@@ -1,30 +1,31 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
-import scipy as sc
-import scipy.linalg as sclin
-import scipy.constants as scconst
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-import input_ham
 
-fname='000AsP.input'
-sw_inp=0
-mu=9.8
-mass=1.0
+fname='000AsP.input' #hamiltonian file name
+mu=9.8               #chemical potential
+mass=1.0             #effective mass
+sw_inp=0             #input hamiltonian format
+"""
+sw_inp: switch input hamiltonian's format
+0: .input file
+1: ham_r.txt, irvec.txt, ndegen.txt
+2: {case}_hr.dat file (wannier90 default hopping file)
+else: Hopping.dat file (ecalj hopping file)
+"""
 
-alatt=sc.array([3.96*sc.sqrt(2.),3.96*sc.sqrt(2.),13.02*0.5])
-Arot=sc.array([[ .5,-.5, .5],[ .5, .5, .5],[-.5,-.5, .5]])
-k_list=[[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]]
-xlabel=['$\Gamma$','X','M','$\Gamma$']
-olist=[0,2,3]
+alatt=sc.array([3.96*sc.sqrt(2.),3.96*sc.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
+Arot=sc.array([[ .5,-.5, .5],[ .5, .5, .5],[-.5,-.5, .5]]) #rotation matrix for dec. to primitive vector
+k_list=[[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. points
+xlabel=['$\Gamma$','X','M','$\Gamma$'] #sym. points name
 
-N=100
-FSmesh=100
-eta=1.0e-1
-sw_dec_axis=False #transform Cartesian axis
-sw_color=True #plot band or FS with orbital weight
+olist=[0,2,3]        #orbital number with color plot [R,G,B]
+N=100                #kmesh btween symmetry points
+FSmesh=100           #kmesh for option in {1,2,3,5,6}
+eta=1.0e-1           #eta for green function
+sw_dec_axis=False    #transform Cartesian axis
+sw_color=True        #plot band or FS with orbital weight
 
-option=6
+option=1
 """
 option: switch calculation modes
 0:band plot
@@ -41,7 +42,27 @@ sw_FS=(True if option in (1,3,5) else False)
 sw_plot_veloc=(True if option in (3,6) else False)
 sw_3dfs=(True if option in (2,6) else False)
 
+#-------------------import modules------------------
+import scipy as sc
+import scipy.linalg as sclin
+import scipy.constants as scconst
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import input_ham
+#----------------define functions-------------------
 def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
+    """
+    This function generates hamiltonian from hopping parameters.
+    input values:
+    k: k-point coordinate
+    rvec: real space coodinate for hopings
+    ham_r: values of hoppings
+    ndegen: weight for hoppings
+    out_phase: output or not phase array
+    output values:
+    ham: wave-number space hamiltonian in k
+    expk: phase in k
+    """
     def gen_phase(k,rvec,ndegen):
         phase=sc.array([sc.sum(r*k) for r in rvec])
         expk=(sc.cos(phase)-1j*sc.sin(phase))/ndegen
@@ -54,6 +75,16 @@ def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
         return ham
 
 def get_vec(k,rvec,ham_r,ndegen):
+    """
+    This function generates velocities from hopping parameters.
+    input values:
+    k: k-point coordinate
+    rvec: real space coodinate for hopings
+    ham_r: values of hoppings
+    ndegen: weight for hoppings
+    output values:
+    vec: velocity in k for each bands
+    """
     hbar=scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e10
     ham,expk=get_ham(k,rvec,ham_r,ndegen,out_phase=True)
     uni=sclin.eigh(ham)[1]
@@ -63,16 +94,36 @@ def get_vec(k,rvec,ham_r,ndegen):
     return vec
 
 def gen_eig(ham,mass,mu,sw):
-    etmp=[sclin.eigh(h) for h in ham]
-    eigtmp=sc.array([eg[0] for eg in etmp])
+    """
+    This function generates eigenvalue and eigenvectors or max and min energy values of hamiltonian.
+    input values:
+    ham: wave-number space hamiltonian in k
+    mass: effective mass
+    mu: chemical potential
+    sw: switch for retrun enegyes or max/min energy
+    output values:
+    eig: eigenvalues of hamiltonian
+    uni: eigenvectors of hamiltonian
+    """
     if sw:
+        etmp=[sclin.eigh(h) for h in ham]
+        eigtmp=sc.array([eg[0] for eg in etmp])
         eig=eigtmp.T/mass-mu
         uni=sc.array([eg[1] for eg in etmp]).T
         return eig,uni
     else:
+        eigtmp=sc.array([sclin.eigvalsh(h) for h in ham])
         return (eigtmp.max()/mass-mu),(eigtmp.min()/mass-mu)
 
 def gen_uni(ham,blist):
+    """
+    This function generates eigenvectors of hamiltonian.
+    input values:
+    ham: wave-number space hamiltonian in k
+    blist: list of band number
+    output values:
+    uni: eigenvectors of hamiltonian
+    """
     uni=sc.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham,blist)])
     return uni
 
@@ -133,56 +184,44 @@ def gen_ksq(mesh):
     X,Y=sc.meshgrid(x,x)
     return sc.array([X.reshape(1,sqmesh),Y.reshape(1,sqmesh),Y.reshape(1,sqmesh)*0.0]).T,X,Y
 
-def mk_kf3d(mesh,sw_bnum):
+def mk_kf(mesh,sw_bnum,dim):
     import skimage as sk
     from mpl_toolkits.mplot3d import axes3d
     km=sc.linspace(-sc.pi,sc.pi,mesh+1,True)
-    cumesh=(mesh+1)*(mesh+1)*(mesh+1)
-    x,y,z=sc.meshgrid(km,km,km)
-    klist=sc.array([x.reshape(1,cumesh),y.reshape(1,cumesh),z.reshape(1,cumesh)]).T
+    if dim==2:
+        sqmesh=(mesh+1)*(mesh+1)
+        x,y=sc.meshgrid(km,km)
+        klist=sc.array([x.reshape(1,sqmesh),y.reshape(1,sqmesh),y.reshape(1,sqmesh)*0.0]).T
+    elif dim==3:
+        cumesh=(mesh+1)*(mesh+1)*(mesh+1)
+        x,y,z=sc.meshgrid(km,km,km)
+        klist=sc.array([x.reshape(1,cumesh),y.reshape(1,cumesh),z.reshape(1,cumesh)]).T
     ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
-    eig,uni=gen_eig(ham,mass,mu,True)
+    eig=sc.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
     v2=[]
     if sw_bnum:
         fsband=[]
     for i,e in enumerate(eig):
         if(e.max()*e.min() < 0. ):
-            vertices,faces,normals,values=sk.measure.marching_cubes_lewiner(e.reshape(mesh+1,mesh+1,mesh+1),0)
-            if sw_bnum:
-                fsband.append(i)
-                v2.append((vertices-mesh/2)*2*sc.pi/mesh)
-                #v3.append(faces)
-            else:
-                v2.extend((2*sc.pi*(vertices-mesh/2)/mesh)[faces])
-    if sw_bnum:
-        return v2,fsband
-    else:
-        return sc.array(v2)
-
-def mk_kf2d(mesh,sw_bnum):
-    import skimage as sk
-    from mpl_toolkits.mplot3d import axes3d
-    km=sc.linspace(-sc.pi,sc.pi,mesh+1,True)
-    sqmesh=(mesh+1)*(mesh+1)
-    x,y=sc.meshgrid(km,km)
-    klist=sc.array([x.reshape(1,sqmesh),y.reshape(1,sqmesh),y.reshape(1,sqmesh)*0.0]).T
-    ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
-    eig,uni=gen_eig(ham,mass,mu,True)
-    v2=[]
-    if sw_bnum:
-        fsband=[]
-    for i,e in enumerate(eig):
-        if(e.max()*e.min() < 0. ):
-            cont=sk.measure.find_contours(e.reshape(mesh+1,mesh+1),0)
-            ct0=[]
-            for c in cont:
-                ct0.extend(c)
-            ct=(sc.array([[c[0],c[1],mesh/2] for c in ct0])-mesh/2)*2*sc.pi/mesh
-            if sw_bnum:
-                fsband.append(i)
-                v2.append(ct)
-            else:
-                v2.extend(ct)
+            if dim==2:
+                cont=sk.measure.find_contours(e.reshape(mesh+1,mesh+1),0)
+                ct0=[]
+                for c in cont:
+                    ct0.extend(c)
+                ct=(sc.array([[c[0],c[1],mesh/2] for c in ct0])-mesh/2)*2*sc.pi/mesh
+                if sw_bnum:
+                    fsband.append(i)
+                    v2.append(ct)
+                else:
+                    v2.extend(ct)
+            elif dim==3:
+                vertices,faces,normals,values=sk.measure.marching_cubes_lewiner(e.reshape(mesh+1,mesh+1,mesh+1),0)
+                if sw_bnum:
+                    fsband.append(i)
+                    v2.append((vertices-mesh/2)*2*sc.pi/mesh)
+                    #v3.append(faces)
+                else:
+                    v2.extend((2*sc.pi*(vertices-mesh/2)/mesh)[faces])
     if sw_bnum:
         return v2,fsband
     else:
@@ -191,7 +230,7 @@ def mk_kf2d(mesh,sw_bnum):
 def gen_3d_fs_plot(mesh):
     from mpl_toolkits.mplot3d import axes3d
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-    vert=mk_kf3d(mesh,False)
+    vert=mk_kf(mesh,False,3)
     fig=plt.figure()
     ax=fig.add_subplot(111,projection='3d')
     #x,y,z=zip(*vert-mesh/2)
@@ -292,6 +331,7 @@ def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
     fig.colorbar(cont)
     plt.show()
 
+#--------------------------main program-------------------------------
 if __name__=="__main__":
     if sw_inp==0: #.input file
         rvec,ndegen,ham_r,no,nr=input_ham.import_out(fname,False)
@@ -307,7 +347,7 @@ if __name__=="__main__":
         rvec=rvec1
     if sw_3dfs:
         if sw_plot_veloc:
-            klist,blist=mk_kf3d(FSmesh,True)
+            klist,blist=mk_kf(FSmesh,True,3)
             veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
             plot_veloc_FS(veloc,klist)
         else:
@@ -315,10 +355,10 @@ if __name__=="__main__":
     else:
         if sw_FS:
             if sw_plot_veloc:
-                klist,blist=mk_kf2d(FSmesh,True)
+                klist,blist=mk_kf(FSmesh,True,2)
             else:
                 klist,X,Y=gen_ksq(FSmesh)
-                klist1,blist=mk_kf2d(FSmesh,True)
+                klist1,blist=mk_kf(FSmesh,True,2)
                 ham1=sc.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
         else:
             klist,spa_length,xticks=mk_klist(k_list,N)
