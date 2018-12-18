@@ -62,13 +62,10 @@ def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     ham: wave-number space hamiltonian in k
     expk: phase in k
     """
-    phase=sc.array([sc.sum(r*k) for r in rvec])
+    phase=sc.array([(r*k).sum() for r in rvec])
     expk=(sc.cos(phase)-1j*sc.sin(phase))/ndegen
-    ham=sc.array([[sc.sum(hr*expk) for hr in hmr] for hmr in ham_r])
-    if(out_phase):
-        return ham,expk
-    else:
-        return ham
+    ham=sc.array([[(hr*expk).sum() for hr in hmr] for hmr in ham_r])
+    return (ham, expk if out_phase else ham)
 
 def get_vec(k,rvec,ham_r,ndegen):
     """
@@ -84,7 +81,7 @@ def get_vec(k,rvec,ham_r,ndegen):
     hbar=scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e10
     ham,expk=get_ham(k,rvec,ham_r,ndegen,out_phase=True)
     uni=sclin.eigh(ham)[1]
-    vec0=sc.array([[[-1j*a*sc.sum(r*hr*expk)/hbar 
+    vec0=sc.array([[[-1j*a*((r*hr*expk).sum())/hbar 
                       for a,r in zip(alatt,rvec.T)] for hr in hmr] for hmr in ham_r])
     vec=sc.array([sc.diag(sc.conjugate(uni.T).dot(v0.T).dot(uni)) for v0 in vec0.T]).T
     return vec
@@ -130,7 +127,7 @@ def mk_klist(k_list,N):
     xticks=[]
     for ks,ke in zip(k_list,k_list[1:]):
         dkv=sc.array(ke)-sc.array(ks)
-        dkv_length=sc.sqrt(sc.sum((dkv*alatt)**2))
+        dkv_length=sc.sqrt(((dkv*alatt)*(dkv*alatt)).sum())
         tmp=[2.*sc.pi*(dkv/N*i+ks) for i in range(N)]
         tmp2=sc.linspace(0,dkv_length,N)+maxsplen*N/(N-1)
         maxsplen=tmp2.max()
@@ -361,7 +358,7 @@ if __name__=="__main__":
                 veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
             else:
                 veloc=sc.array([get_vec(k,rvec,ham_r,ndegen) for k in klist])
-                abs_veloc=sc.array([[sc.sqrt(sum(v**2)) for v in vv] for vv in veloc]).T
+                abs_veloc=sc.array([[sc.sqrt((v*v).sum()) for v in vv] for vv in veloc]).T
                 veloc=sc.array([get_vec(k,rvec,ham_r,ndegen).T for k in klist]).T
         else:
             ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
