@@ -62,14 +62,14 @@ def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     ham: wave-number space hamiltonian in k
     expk: phase in k
     """
-    phase=sc.array([(r*k).sum() for r in rvec])
+    phase=(rvec*k).sum(axis=1)
     expk=(sc.cos(phase)-1j*sc.sin(phase))/ndegen
-    ham=sc.array([[(hr*expk).sum() for hr in hmr] for hmr in ham_r])
+    no,nr=len(ham_r),len(expk)
+    ham=(ham_r.reshape(no*no,nr)*expk).sum(axis=1).reshape(no,no)
     if out_phase:
-        return ham, expk
+        return ham, expk,no,nr
     else:
         return ham
-
 def get_vec(k,rvec,ham_r,ndegen):
     """
     This function generates velocities from hopping parameters.
@@ -81,12 +81,12 @@ def get_vec(k,rvec,ham_r,ndegen):
     output values:
     vec: velocity in k for each bands
     """
-    hbar=scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e10
-    ham,expk=get_ham(k,rvec,ham_r,ndegen,out_phase=True)
+    ihbar=1./scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e-10
+    ham,expk,no,nr=get_ham(k,rvec,ham_r,ndegen,out_phase=True)
     uni=sclin.eigh(ham)[1]
-    vec0=sc.array([[[-1j*a*((r*hr*expk).sum())/hbar 
-                      for a,r in zip(alatt,rvec.T)] for hr in hmr] for hmr in ham_r])
-    vec=sc.array([sc.diag(sc.conjugate(uni.T).dot(v0.T).dot(uni)) for v0 in vec0.T]).T
+    vec0=sc.array([-1j*ihbar*(ham_r.reshape(no*no,nr)*(r*expk)).sum(axis=1).reshape(no,no)
+                    for r in (alatt*rvec).T])
+    vec=sc.array([(sc.conjugate(uni.T).dot(v0).dot(uni)).diagonal() for v0 in vec0]).T
     return vec
 
 def gen_eig(ham,mass,mu,sw):
