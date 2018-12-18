@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
+import scipy as sc
 
 fname='000AsP.input' #hamiltonian file name
 mu=9.8               #chemical potential
@@ -25,7 +26,7 @@ eta=1.0e-1           #eta for green function
 sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
 
-option=1
+option=3
 """
 option: switch calculation modes
 0:band plot
@@ -41,9 +42,7 @@ spectrum=(True if option in (4,5) else False)
 sw_FS=(True if option in (1,3,5) else False)
 sw_plot_veloc=(True if option in (3,6) else False)
 sw_3dfs=(True if option in (2,6) else False)
-
-#-------------------import modules------------------
-import scipy as sc
+#----------import modules without scipy-------------
 import scipy.linalg as sclin
 import scipy.constants as scconst
 import matplotlib.pyplot as plt
@@ -63,11 +62,8 @@ def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     ham: wave-number space hamiltonian in k
     expk: phase in k
     """
-    def gen_phase(k,rvec,ndegen):
-        phase=sc.array([sc.sum(r*k) for r in rvec])
-        expk=(sc.cos(phase)-1j*sc.sin(phase))/ndegen
-        return expk
-    expk=gen_phase(k,rvec,ndegen)
+    phase=sc.array([sc.sum(r*k) for r in rvec])
+    expk=(sc.cos(phase)-1j*sc.sin(phase))/ndegen
     ham=sc.array([[sc.sum(hr*expk) for hr in hmr] for hmr in ham_r])
     if(out_phase):
         return ham,expk
@@ -182,20 +178,18 @@ def gen_ksq(mesh):
     x=sc.linspace(-sc.pi,sc.pi,mesh,True)
     sqmesh=mesh*mesh
     X,Y=sc.meshgrid(x,x)
-    return sc.array([X.reshape(1,sqmesh),Y.reshape(1,sqmesh),Y.reshape(1,sqmesh)*0.0]).T,X,Y
+    return sc.array([X.ravel(),Y.ravel(),Y.ravel()*0.0]).T,X,Y
 
 def mk_kf(mesh,sw_bnum,dim):
     import skimage as sk
     from mpl_toolkits.mplot3d import axes3d
     km=sc.linspace(-sc.pi,sc.pi,mesh+1,True)
     if dim==2:
-        sqmesh=(mesh+1)*(mesh+1)
         x,y=sc.meshgrid(km,km)
-        klist=sc.array([x.reshape(1,sqmesh),y.reshape(1,sqmesh),y.reshape(1,sqmesh)*0.0]).T
+        z=y*0.0
     elif dim==3:
-        cumesh=(mesh+1)*(mesh+1)*(mesh+1)
         x,y,z=sc.meshgrid(km,km,km)
-        klist=sc.array([x.reshape(1,cumesh),y.reshape(1,cumesh),z.reshape(1,cumesh)]).T
+    klist=sc.array([x.ravel(),y.ravel(),z.ravel()]).T
     ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
     eig=sc.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
     v2=[]
