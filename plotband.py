@@ -65,7 +65,10 @@ def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     phase=sc.array([(r*k).sum() for r in rvec])
     expk=(sc.cos(phase)-1j*sc.sin(phase))/ndegen
     ham=sc.array([[(hr*expk).sum() for hr in hmr] for hmr in ham_r])
-    return (ham, expk if out_phase else ham)
+    if out_phase:
+        return ham, expk
+    else:
+        return ham
 
 def get_vec(k,rvec,ham_r,ndegen):
     """
