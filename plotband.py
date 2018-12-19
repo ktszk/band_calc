@@ -26,7 +26,9 @@ eta=1.0e-1           #eta for green function
 sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
 
-option=3
+kz=sc.pi*0.0
+
+option=1
 """
 option: switch calculation modes
 0:band plot
@@ -86,7 +88,7 @@ def get_vec(k,rvec,ham_r,ndegen):
     uni=sclin.eigh(ham)[1]
     vec0=sc.array([-1j*ihbar*(ham_r.reshape(no*no,nr)*(r*expk)).sum(axis=1).reshape(no,no)
                     for r in (alatt*rvec).T])
-    vec=sc.array([(sc.conjugate(uni.T).dot(v0).dot(uni)).diagonal() for v0 in vec0]).T
+    vec=sc.array([(uni.conjugate().T.dot(v0).dot(uni)).diagonal() for v0 in vec0]).T
     return vec
 
 def gen_eig(ham,mass,mu,sw):
@@ -124,6 +126,16 @@ def gen_uni(ham,blist):
     return uni
 
 def mk_klist(k_list,N):
+    """
+    This function generates klist of spaghetti.
+    input values:
+    k_list: name and coordinate of sym. points
+    N: k-mesh between sym. points
+    output values:
+    klist:klist of spaghetti
+    splen:length of hrizontal axis
+    xticks: xlabels
+    """
     klist=[]
     splen=[]
     maxsplen=0
@@ -143,10 +155,19 @@ def mk_klist(k_list,N):
     return sc.array(klist),sc.array(splen),xticks
 
 def plot_band(eig,spl,xticks,uni,ol):
+    """
+    This function plot spaghetti.
+    input values:
+    eig: energy array
+    spl: coordinates of horizontal axis
+    xticks: xlabels
+    uni: weight of orbitals
+    ol: plot orbital list
+    """
     for e,cl in zip(eig,uni):
-        clist=sc.array([sc.round_(abs(cl[ol[0]])*abs(cl[ol[0]]),4),
-                        sc.round_(abs(cl[ol[1]])*abs(cl[ol[1]]),4),
-                        sc.round_(abs(cl[ol[2]])*abs(cl[ol[2]]),4)]).T
+        clist=sc.array([(abs(cl[ol[0]])*abs(cl[ol[0]])).round(4),
+                        (abs(cl[ol[1]])*abs(cl[ol[1]])).round(4),
+                        (abs(cl[ol[2]])*abs(cl[ol[2]])).round(4)]).T
         plt.scatter(spl,e,s=5,c=clist)
     for x in xticks[1:-1]:
         plt.axvline(x,ls='-',lw=0.25,color='black')
@@ -156,6 +177,17 @@ def plot_band(eig,spl,xticks,uni,ol):
     plt.show()
 
 def plot_spectrum(ham,klen,mu,de=100,eta0=5.e-2,smesh=200):
+    """
+    This function plot spaghetti like spectrum.
+    input values:
+    ham: hamiltonian array
+    klen: coordinates of horizontal axis
+    mu: chemical potential
+    optional:
+    de: energy mesh
+    eta: eta for green function
+    smesh: contor mesh
+    """
     emax,emin=gen_eig(ham,mass,mu,False)
     w=sc.linspace(emin*1.1,emax*1.1,de)
     #eta=w*0+eta0
@@ -174,19 +206,37 @@ def plot_spectrum(ham,klen,mu,de=100,eta0=5.e-2,smesh=200):
     plt.xticks(xticks,xlabel)
     plt.show()
 
-def gen_ksq(mesh):
+def gen_ksq(mesh,kz):
+    """
+    This function generates square k mesh for 2D spectrum plot
+    input:
+    mesh: k-mesh grid size
+    kz: kz of plotting FS plane
+    """
     x=sc.linspace(-sc.pi,sc.pi,mesh,True)
     sqmesh=mesh*mesh
     X,Y=sc.meshgrid(x,x)
-    return sc.array([X.ravel(),Y.ravel(),Y.ravel()*0.0]).T,X,Y
+    return sc.array([X.ravel(),Y.ravel(),Y.ravel()*0.0+kz]).T,X,Y
 
-def mk_kf(mesh,sw_bnum,dim):
+def mk_kf(mesh,sw_bnum,dim,kz=0):
+    """
+    This function generates k-list on Fermi surfaces
+    input:
+    mesh: initial k-mesh grid size
+    sw_bnum:switch output format
+    dim: output dimension
+    optional:
+    kz: kz of plotting FS plane use only dim=2
+    output:
+    v2: klist on Fermi surface
+    fsband: band number crossing Fermi energy
+    """
     import skimage as sk
     from mpl_toolkits.mplot3d import axes3d
     km=sc.linspace(-sc.pi,sc.pi,mesh+1,True)
     if dim==2:
         x,y=sc.meshgrid(km,km)
-        z=y*0.0
+        z=y*0.0+kz
     elif dim==3:
         x,y,z=sc.meshgrid(km,km,km)
     klist=sc.array([x.ravel(),y.ravel(),z.ravel()]).T
@@ -202,7 +252,8 @@ def mk_kf(mesh,sw_bnum,dim):
                 ct0=[]
                 for c in cont:
                     ct0.extend(c)
-                ct=(sc.array([[c[0],c[1],mesh/2] for c in ct0])-mesh/2)*2*sc.pi/mesh
+                ct=(sc.array([[c[0],c[1],+mesh/2] for c in ct0])-mesh/2)*2*sc.pi/mesh
+                ct[:,2]=kz
                 if sw_bnum:
                     fsband.append(i)
                     v2.append(ct)
@@ -243,20 +294,20 @@ def plot_veloc_FS(vfs,kfs):
     ax=fig.add_subplot(111,projection='3d')
     vf,kf=[],[]
     for v,k in zip(vfs,kfs):
-        ave_vx=sum(abs(sc.array(v).T[0]))/len(v)
-        ave_vy=sum(abs(sc.array(v).T[1]))/len(v)
-        ave_vz=sum(abs(sc.array(v).T[2]))/len(v)
+        ave_vx=abs(sc.array(v).T[0]).mean()
+        ave_vy=abs(sc.array(v).T[1]).mean()
+        ave_vz=abs(sc.array(v).T[2]).mean()
         print '%.3e %.3e %.3e'%(ave_vx,ave_vy,ave_vz)
         vf.extend(v)
         kf.extend(k)
     x,y,z=zip(*sc.array(kf))
     vf=sc.array(vf)
-    ave_vx=sum(abs(vf.T[0]))/len(vf)
-    ave_vy=sum(abs(vf.T[1]))/len(vf)
-    ave_vz=sum(abs(vf.T[2]))/len(vf)
+    ave_vx=abs(vf.T[0]).mean()
+    ave_vy=abs(vf.T[1]).mean()
+    ave_vz=abs(vf.T[2]).mean()
     print '%.3e %.3e %.3e'%(ave_vx,ave_vy,ave_vz)
-    ave=sc.array([sum(abs(v)) for v in vf])
-    fs=ax.scatter(x,y,z,c=ave,cmap=cm.jet)
+    absv=sc.array([abs(v).sum() for v in vf])
+    fs=ax.scatter(x,y,z,c=absv,cmap=cm.jet)
     ax.set_xlim(-sc.pi, sc.pi)
     ax.set_ylim(-sc.pi, sc.pi)
     ax.set_zlim(-sc.pi, sc.pi)
@@ -267,7 +318,7 @@ def plot_vec2(veloc,klist):
     v=[]
     k=[]
     for vv,kk in zip(veloc,klist):
-        v0=sc.array([sc.sqrt(sum(abs(v0)*abs(v0))) for v0 in vv])
+        v0=sc.array([sc.sqrt((abs(v0)*abs(v0)).sum()) for v0 in vv])
         v.extend(v0)
         k.extend(kk)
     v=sc.array(v)
@@ -349,10 +400,10 @@ if __name__=="__main__":
     else:
         if sw_FS:
             if sw_plot_veloc:
-                klist,blist=mk_kf(FSmesh,True,2)
+                klist,blist=mk_kf(FSmesh,True,2,kz)
             else:
-                klist,X,Y=gen_ksq(FSmesh)
-                klist1,blist=mk_kf(FSmesh,True,2)
+                klist,X,Y=gen_ksq(FSmesh,kz)
+                klist1,blist=mk_kf(FSmesh,True,2,kz)
                 ham1=sc.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
         else:
             klist,spa_length,xticks=mk_klist(k_list,N)
