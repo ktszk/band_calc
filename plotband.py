@@ -19,14 +19,14 @@ Arot=sc.array([[ .5,-.5, .5],[ .5, .5, .5],[-.5,-.5, .5]]) #rotation matrix for 
 k_list=[[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. points
 xlabel=['$\Gamma$','X','M','$\Gamma$'] #sym. points name
 
-olist=[0,2,3]        #orbital number with color plot [R,G,B]
+olist=[1,2,3]        #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
 N=100                #kmesh btween symmetry points
 FSmesh=100           #kmesh for option in {1,2,3,5,6}
 eta=1.0e-1           #eta for green function
 sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
 
-kz=sc.pi*0.0
+kz=sc.pi*0.
 
 option=1
 """
@@ -165,9 +165,13 @@ def plot_band(eig,spl,xticks,uni,ol):
     ol: plot orbital list
     """
     for e,cl in zip(eig,uni):
-        clist=sc.array([(abs(cl[ol[0]])*abs(cl[ol[0]])).round(4),
-                        (abs(cl[ol[1]])*abs(cl[ol[1]])).round(4),
-                        (abs(cl[ol[2]])*abs(cl[ol[2]])).round(4)]).T
+        c1=((abs(cl[ol[0]])*abs(cl[ol[0]])).round(4) if isinstance(ol[0],int)
+            else (abs(cl[ol[0]])*abs(cl[ol[0]])).sum(axis=0).round(4))
+        c2=((abs(cl[ol[1]])*abs(cl[ol[1]])).round(4) if isinstance(ol[1],int)
+            else (abs(cl[ol[1]])*abs(cl[ol[1]])).sum(axis=0).round(4))
+        c3=((abs(cl[ol[2]])*abs(cl[ol[2]])).round(4) if isinstance(ol[2],int)
+            else (abs(cl[ol[2]])*abs(cl[ol[2]])).sum(axis=0).round(4))
+        clist=sc.array([c1,c2,c3]).T
         plt.scatter(spl,e,s=5,c=clist)
     for x in xticks[1:-1]:
         plt.axvline(x,ls='-',lw=0.25,color='black')
@@ -337,9 +341,14 @@ def plot_FS(uni,klist,ol,eig,X,Y,sw_color):
     ax=fig.add_subplot(111,aspect='equal')
     if sw_color:
         for kk,cl in zip(klist,uni):
-            clist=sc.array([[round(abs(c[ol[0]])*abs(c[ol[0]]),4),
-                             round(abs(c[ol[1]])*abs(c[ol[1]]),4),
-                             round(abs(c[ol[2]])*abs(c[ol[2]]),4)] for c in cl])
+            cl=sc.array(cl)
+            c1=((abs(cl[:,ol[0]])*abs(cl[:,ol[0]])).round(4) if isinstance(ol[0],int)
+                else (abs(cl[:,ol[0]])*abs(cl[:,ol[0]])).sum(axis=1).round(4))
+            c2=((abs(cl[:,ol[1]])*abs(cl[:,ol[1]])).round(4) if isinstance(ol[1],int)
+                else (abs(cl[:,ol[1]])*abs(cl[:,ol[1]])).sum(axis=1).round(4))
+            c3=((abs(cl[:,ol[2]])*abs(cl[:,ol[2]])).round(4) if isinstance(ol[2],int)
+                else (abs(cl[:,ol[2]])*abs(cl[:,ol[2]])).sum(axis=1).round(4))
+            clist=sc.array([c1,c2,c3]).T
             plt.scatter(kk[:,0],kk[:,1],s=1.0,c=clist)
     else:
         for en in eig:
