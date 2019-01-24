@@ -28,7 +28,7 @@ sw_color=True        #plot band or FS with orbital weight
 
 kz=sc.pi*0.
 
-option=1
+option=0
 """
 option: switch calculation modes
 0:band plot
