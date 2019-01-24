@@ -9,26 +9,21 @@ no is number of orbitals. nr is number of hopping matrices.
 sw_ndegen: import_hop only, select lead ndegen from ndegen.txt (True) or not (False) default False
 """
 def import_hop(fname,sw_ndegen=False,sw_hoplist=True):
-    tmp=[f.split() for f in open(fname+'/irvec.txt','r')]
-    rvec=np.array([[float(tt) for tt in tp] for tp in tmp])
-    tmp=[f.strip(' ()\n').split(',') for f in open(fname+'/ham_r.txt','r')]
-    nr=len(rvec)
-    no=int(np.sqrt(len(tmp)/nr))
-    tmp1=np.array([complex(float(tp[0]),float(tp[1])) for tp in tmp])
-    ham_r=(np.reshape(tmp1,(nr,no,no)) if sw_hoplist else np.reshape(tmp1,(nr,no*no)).T.reshape(no,no,nr))
-    ndegen=(np.array([float(f) for f in open(fname+'/ndegen.txt','r')]) if sw_ndegen else np.array([1]*nr))
+    rvec=np.loadtxt(fname+'/irvec.txt')
+    nr=rvec.size//3
+    tmp=np.array([complex(float(tp[0]),float(tp[1])) for tp in [f.strip(' ()\n').split(',') for f in open(fname+'/ham_r.txt','r')]])
+    no=int(np.sqrt(tmp.size/nr))
+    ham_r=(tmp.reshape(nr,no,no) if sw_hoplist else np.reshape(tmp,(nr,no*no)).T.reshape(no,no,nr))
+    ndegen=(np.loadtxt(fname+'/ndegen.txt') if sw_ndegen else np.ones(nr))
     return(rvec,ndegen,ham_r,no,nr)
 
 def import_out(fname,sw_hoplist=True):
-    tmp=[f.split() for f in open(fname,'r')]
-    tmp1=[[float(tp) for tp in tpp] for tpp in tmp]
-    tmp=np.array([complex(tp[3],tp[4]) for tp in tmp1])
-    r0=tmp1[0][:3]
-    con=sum(1 if rr[:3]==r0 else 0  for rr in tmp1)
-    no,nr =int(np.sqrt(con)),len(tmp1)//con
-    rvec=np.array([tp[:3] for tp in tmp1[:nr]])
-    ham_r=(np.reshape(tmp,(no*no,nr)).T.reshape(nr,no,no) if sw_hoplist else np.reshape(tmp,(no,no,nr)))
-    ndegen=np.array([1]*nr)
+    data=np.loadtxt(fname)
+    con=sum(1 if abs(rr-data[0,:3]).sum().round(1)==0 else 0  for rr in data[:,:3])
+    no,nr =int(np.sqrt(con)),data[:,0].size//con
+    rvec=data[:nr,:3]
+    ham_r=(data[:,3]+1j*data[:,4]).reshape((nr,no,no) if sw_hoplist else (no,no,nr))
+    ndegen=np.ones(nr)
     return(rvec,ndegen,ham_r,no,nr)
 
 def import_hr(name,sw_hoplist=True):
