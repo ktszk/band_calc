@@ -10,7 +10,7 @@ sw_ndegen: import_hop only, select lead ndegen from ndegen.txt (True) or not (Fa
 """
 def import_hop(fname,sw_ndegen=False,sw_hoplist=True):
     rvec=np.loadtxt(fname+'/irvec.txt')
-    nr=rvec.size//3
+    nr=rvec[:,0].size
     tmp=np.array([complex(float(tp[0]),float(tp[1])) for tp in [f.strip(' ()\n').split(',') for f in open(fname+'/ham_r.txt','r')]])
     no=int(np.sqrt(tmp.size/nr))
     ham_r=(tmp.reshape(nr,no,no) if sw_hoplist else np.reshape(tmp,(nr,no*no)).T.reshape(no,no,nr))
@@ -19,7 +19,7 @@ def import_hop(fname,sw_ndegen=False,sw_hoplist=True):
 
 def import_out(fname,sw_hoplist=True):
     data=np.loadtxt(fname)
-    con=sum(1 if abs(rr-data[0,:3]).sum().round(1)==0 else 0  for rr in data[:,:3])
+    con=(data[:,:3]==data[0,:3]).prod(axis=1).sum()
     no,nr =int(np.sqrt(con)),data[:,0].size//con
     rvec=data[:nr,:3]
     ham_r=(data[:,3]+1j*data[:,4]).reshape((nr,no,no) if sw_hoplist else (no,no,nr))
