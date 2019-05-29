@@ -27,6 +27,7 @@ sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
 
 kz=sc.pi*0.
+with_spin=False #use only with soc hamiltonian
 
 option=0
 """
@@ -340,7 +341,9 @@ def plot_FS(uni,klist,ol,eig,X,Y,sw_color):
     fig=plt.figure()
     ax=fig.add_subplot(111,aspect='equal')
     if sw_color:
-        for kk,cl in zip(klist,uni):
+        col=['r','g','b','c','m','y','k','w']
+        ncut=8
+        for kk,cl,cb in zip(klist,uni,col):
             cl=sc.array(cl)
             c1=((abs(cl[:,ol[0]])*abs(cl[:,ol[0]])).round(4) if isinstance(ol[0],int)
                 else (abs(cl[:,ol[0]])*abs(cl[:,ol[0]])).sum(axis=1).round(4))
@@ -349,7 +352,17 @@ def plot_FS(uni,klist,ol,eig,X,Y,sw_color):
             c3=((abs(cl[:,ol[2]])*abs(cl[:,ol[2]])).round(4) if isinstance(ol[2],int)
                 else (abs(cl[:,ol[2]])*abs(cl[:,ol[2]])).sum(axis=1).round(4))
             clist=sc.array([c1,c2,c3]).T
-            plt.scatter(kk[:,0],kk[:,1],s=1.0,c=clist)
+            if(with_spin):
+                v1=((cl[:,no/2:]*cl[:,:no/2].conjugate()).sum(axis=1)
+                    +(cl[:,:no/2]*cl[:,no/2:].conjugate()).sum(axis=1)).real
+                v2=((cl[:,no/2:]*cl[:,:no/2].conjugate()).sum(axis=1)
+                    -(cl[:,:no/2]*cl[:,no/2:].conjugate()).sum(axis=1)).imag
+                v1=v1[::ncut].round(4)
+                v2=v2[::ncut].round(4)
+                k1=kk[::ncut,0]
+                k2=kk[::ncut,1]
+                plt.quiver(k1,k2,v1,v2,color=cb,angles='xy',scale_units='xy',scale=3.0)
+            plt.scatter(kk[:,0],kk[:,1],s=2.0,c=clist)
     else:
         for en in eig:
             if(en.max()*en.min()<0.0):
