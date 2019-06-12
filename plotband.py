@@ -14,6 +14,9 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
+sw_calc_mu =True
+fill=3.05
+
 alatt=sc.array([3.96*sc.sqrt(2.),3.96*sc.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
 Arot=sc.array([[ .5,-.5, .5],[ .5, .5, .5],[-.5,-.5, .5]]) #rotation matrix for dec. to primitive vector
 k_list=[[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. points
@@ -25,11 +28,10 @@ FSmesh=100           #kmesh for option in {1,2,3,5,6}
 eta=1.0e-1           #eta for green function
 sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
-
 kz=sc.pi*0.
 with_spin=False #use only with soc hamiltonian
 
-option=0
+option=1
 """
 option: switch calculation modes
 0:band plot
@@ -47,6 +49,7 @@ sw_plot_veloc=(True if option in (3,6) else False)
 sw_3dfs=(True if option in (2,6) else False)
 #----------import modules without scipy-------------
 import scipy.linalg as sclin
+import scipy.optimize as scopt
 import scipy.constants as scconst
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
@@ -73,6 +76,19 @@ def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
         return ham, expk,no,nr
     else:
         return ham
+
+def get_mu(fill,temp=1.0e-3,mesh=40):
+    km=sc.linspace(-sc.pi,sc.pi,mesh+1,True)
+    x,y,z=sc.meshgrid(km,km,km)
+    klist=sc.array([x.ravel(),y.ravel(),z.ravel()]).T
+    ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
+    eig=sc.array([sclin.eigvalsh(h) for h in ham]).T
+    f=lambda mu: 2.*fill*(mesh**3)+(sc.tanh(0.5*(eig-mu)/temp)-1.).sum()
+    #mu=scopt.brentq(f,eig.min(),eig.max())
+    mu=scopt.newton(f,0.5*(eig.min()+eig.max()))
+    print('chemical potential = %6.3f'%mu)
+    return mu
+
 def get_vec(k,rvec,ham_r,ndegen):
     """
     This function generates velocities from hopping parameters.
@@ -283,8 +299,6 @@ def gen_3d_fs_plot(mesh):
     vert=mk_kf(mesh,False,3)
     fig=plt.figure()
     ax=fig.add_subplot(111,projection='3d')
-    #x,y,z=zip(*vert-mesh/2)
-    #fs=ax.scatter(x,y,z,s=1.0)
     m = Poly3DCollection(vert)
     ax.add_collection3d(m)
     ax.set_xlim(-sc.pi, sc.pi)
@@ -408,7 +422,13 @@ if __name__=="__main__":
         rvec,ndegen,ham_r,no,nr=input_ham.import_hr(fname,False)
     else: #Hopping.dat file
         rvec,ndegen,ham_r,no,nr,axis=input_ham.import_Hopping(False)
-
+    if sw_calc_mu:
+        mu=get_mu(fill)
+    else:
+        try:
+            mu
+        except NameError:
+            mu=get_mu(fill)
     if sw_dec_axis:
         rvec1=sc.array([Arot.T.dot(r) for r in rvec])
         rvec=rvec1
@@ -455,7 +475,7 @@ if __name__=="__main__":
                 eig,uni=gen_eig(ham,mass,mu,True)
                 plot_band(eig,spa_length,xticks,uni,olist)
 
-__license__="""Copyright (c) 2018 K. Suzuki
+__license__="""Copyright (c) 2018-2019 K. Suzuki
 Released under the MIT license
 http://opensource.org/licenses/mit-license.php
 """
