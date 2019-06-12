@@ -58,13 +58,13 @@ import input_ham
 def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     """
     This function generates hamiltonian from hopping parameters.
-    input values:
+    arguments:
     k: k-point coordinate
-    rvec: real space coodinate for hopings
+    rvec: real space coodinate for hoppings
     ham_r: values of hoppings
     ndegen: weight for hoppings
-    out_phase: output or not phase array
-    output values:
+    out_phase: output or not phase array (optional, default=False)
+    return values:
     ham: wave-number space hamiltonian in k
     expk: phase in k
     """
@@ -77,7 +77,19 @@ def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     else:
         return ham
 
-def get_mu(fill,temp=1.0e-3,mesh=40):
+def get_mu(fill,rvec,ham_r,ndegen,temp=1.0e-3,mesh=40):
+    """
+    This function calculates chemical potential.
+    arguments:
+    fill: band filling (number of particles in band)
+    rvec: real space coodinate for hoppings
+    ham_r: values of hoppings
+    ndegen: weight for hoppings
+    temp: temperature (optional, default=1.0e-3)
+    mesh: k-points mesh (optional, default=40)
+    return value:
+    mu: chemical potential
+    """
     km=sc.linspace(-sc.pi,sc.pi,mesh+1,True)
     x,y,z=sc.meshgrid(km,km,km)
     klist=sc.array([x.ravel(),y.ravel(),z.ravel()]).T
@@ -92,12 +104,12 @@ def get_mu(fill,temp=1.0e-3,mesh=40):
 def get_vec(k,rvec,ham_r,ndegen):
     """
     This function generates velocities from hopping parameters.
-    input values:
+    arguments:
     k: k-point coordinate
-    rvec: real space coodinate for hopings
+    rvec: real space coodinate for hoppings
     ham_r: values of hoppings
     ndegen: weight for hoppings
-    output values:
+    return values:
     vec: velocity in k for each bands
     """
     ihbar=1./scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e-10
@@ -111,12 +123,12 @@ def get_vec(k,rvec,ham_r,ndegen):
 def gen_eig(ham,mass,mu,sw):
     """
     This function generates eigenvalue and eigenvectors or max and min energy values of hamiltonian.
-    input values:
+    arguments:
     ham: wave-number space hamiltonian in k
     mass: effective mass
     mu: chemical potential
     sw: switch for retrun enegyes or max/min energy
-    output values:
+    return values:
     eig: eigenvalues of hamiltonian
     uni: eigenvectors of hamiltonian
     """
@@ -130,27 +142,15 @@ def gen_eig(ham,mass,mu,sw):
         eigtmp=sc.array([sclin.eigvalsh(h) for h in ham])
         return (eigtmp.max()/mass-mu),(eigtmp.min()/mass-mu)
 
-def gen_uni(ham,blist):
-    """
-    This function generates eigenvectors of hamiltonian.
-    input values:
-    ham: wave-number space hamiltonian in k
-    blist: list of band number
-    output values:
-    uni: eigenvectors of hamiltonian
-    """
-    uni=sc.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham,blist)])
-    return uni
-
 def mk_klist(k_list,N):
     """
     This function generates klist of spaghetti.
-    input values:
+    arguments:
     k_list: name and coordinate of sym. points
     N: k-mesh between sym. points
-    output values:
-    klist:klist of spaghetti
-    splen:length of hrizontal axis
+    return values:
+    klist: klist of spaghetti
+    splen: length of hrizontal axis
     xticks: xlabels
     """
     klist=[]
@@ -174,7 +174,7 @@ def mk_klist(k_list,N):
 def plot_band(eig,spl,xticks,uni,ol):
     """
     This function plot spaghetti.
-    input values:
+    arguments:
     eig: energy array
     spl: coordinates of horizontal axis
     xticks: xlabels
@@ -200,14 +200,13 @@ def plot_band(eig,spl,xticks,uni,ol):
 def plot_spectrum(ham,klen,mu,de=100,eta0=5.e-2,smesh=200):
     """
     This function plot spaghetti like spectrum.
-    input values:
+    arguments:
     ham: hamiltonian array
     klen: coordinates of horizontal axis
     mu: chemical potential
-    optional:
-    de: energy mesh
-    eta: eta for green function
-    smesh: contor mesh
+    de: energy mesh (optional, default=100)
+    eta: eta for green function (optional, default=5e-2)
+    smesh: contor mesh (optional, default=200)
     """
     emax,emin=gen_eig(ham,mass,mu,False)
     w=sc.linspace(emin*1.1,emax*1.1,de)
@@ -230,7 +229,7 @@ def plot_spectrum(ham,klen,mu,de=100,eta0=5.e-2,smesh=200):
 def gen_ksq(mesh,kz):
     """
     This function generates square k mesh for 2D spectrum plot
-    input:
+    arguments:
     mesh: k-mesh grid size
     kz: kz of plotting FS plane
     """
@@ -242,13 +241,12 @@ def gen_ksq(mesh,kz):
 def mk_kf(mesh,sw_bnum,dim,kz=0):
     """
     This function generates k-list on Fermi surfaces
-    input:
+    arguments:
     mesh: initial k-mesh grid size
     sw_bnum:switch output format
     dim: output dimension
-    optional:
-    kz: kz of plotting FS plane use only dim=2
-    output:
+    kz: kz of plotting FS plane use only dim=2 (optional,default=0)
+    return values:
     v2: klist on Fermi surface
     fsband: band number crossing Fermi energy
     """
@@ -294,6 +292,11 @@ def mk_kf(mesh,sw_bnum,dim,kz=0):
         return sc.array(v2)
 
 def gen_3d_fs_plot(mesh):
+    """
+    This function plot 3D Fermi Surface
+    argument:
+    mesh: k-grid mesh size
+    """
     from mpl_toolkits.mplot3d import axes3d
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
     vert=mk_kf(mesh,False,3)
@@ -308,6 +311,11 @@ def gen_3d_fs_plot(mesh):
     plt.show()
 
 def plot_veloc_FS(vfs,kfs):
+    """
+    This function plot 3D Fermi velocities
+    argument:
+    mesh: k-grid mesh size
+    """
     from mpl_toolkits.mplot3d import axes3d
     fig=plt.figure()
     ax=fig.add_subplot(111,projection='3d')
@@ -352,6 +360,17 @@ def plot_vec2(veloc,klist):
     plt.show()
 
 def plot_FS(uni,klist,ol,eig,X,Y,sw_color):
+    """
+    This function plot 2D Fermi Surface with/without orbital weight
+    argument:
+    uni: eigenvectors
+    klist: klist of Fermi surface
+    ol: orbital list using color plot
+    eig: eigenvalues
+    X: X axis array
+    Y: Y axis array
+    sw_color: swtich of color plot
+    """
     fig=plt.figure()
     ax=fig.add_subplot(111,aspect='equal')
     if sw_color:
@@ -422,16 +441,19 @@ if __name__=="__main__":
         rvec,ndegen,ham_r,no,nr=input_ham.import_hr(fname,False)
     else: #Hopping.dat file
         rvec,ndegen,ham_r,no,nr,axis=input_ham.import_Hopping(False)
+
     if sw_calc_mu:
-        mu=get_mu(fill)
+        mu=get_mu(fill,rvec,ham_r,ndegen)
     else:
         try:
             mu
         except NameError:
-            mu=get_mu(fill)
+            mu=get_mu(fill,rvec,ham_r,ndegen)
+
     if sw_dec_axis:
         rvec1=sc.array([Arot.T.dot(r) for r in rvec])
         rvec=rvec1
+
     if sw_3dfs:
         if sw_plot_veloc:
             klist,blist=mk_kf(FSmesh,True,3)
@@ -469,7 +491,7 @@ if __name__=="__main__":
                     plot_vec2(veloc,klist)
                 else:
                     eig,uni=gen_eig(ham,mass,mu,True)
-                    uni=gen_uni(ham1,blist)
+                    uni=sc.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham1,blist)])
                     plot_FS(uni,klist1,olist,eig,X,Y,sw_color)
             else:
                 eig,uni=gen_eig(ham,mass,mu,True)
