@@ -31,7 +31,7 @@ sw_color=True        #plot band or FS with orbital weight
 kz=sc.pi*0.
 with_spin=False #use only with soc hamiltonian
 
-option=1
+option=4
 """
 option: switch calculation modes
 0:band plot
@@ -197,7 +197,7 @@ def plot_band(eig,spl,xticks,uni,ol):
     plt.xticks(xticks,xlabel)
     plt.show()
 
-def plot_spectrum(ham,klen,mu,de=100,eta0=5.e-2,smesh=200):
+def plot_spectrum(ham,klen,mu,eta0=5.e-2,de=100,smesh=200):
     """
     This function plot spaghetti like spectrum.
     arguments:
@@ -461,41 +461,45 @@ if __name__=="__main__":
             plot_veloc_FS(veloc,klist)
         else:
             gen_3d_fs_plot(FSmesh)
-    else:
-        if sw_FS:
-            if sw_plot_veloc:
-                klist,blist=mk_kf(FSmesh,True,2,kz)
-            else:
-                klist,X,Y=gen_ksq(FSmesh,kz)
-                klist1,blist=mk_kf(FSmesh,True,2,kz)
-                ham1=sc.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
-        else:
-            klist,spa_length,xticks=mk_klist(k_list,N)
+        exit()
+
+    if sw_FS: #get kpoint on Fermi Surface
         if sw_plot_veloc:
-            if sw_FS:
-                veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
-            else:
-                veloc=sc.array([get_vec(k,rvec,ham_r,ndegen) for k in klist])
-                abs_veloc=sc.array([[sc.sqrt((v*v).sum()) for v in vv] for vv in veloc]).T
-                veloc=sc.array([get_vec(k,rvec,ham_r,ndegen).T for k in klist]).T
+            klist,blist=mk_kf(FSmesh,True,2,kz)
         else:
-            ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
-        if spectrum:
-            if sw_FS:
-                plot_FSsp(ham,mu,X,Y,eta)
-            else:
-                plot_spectrum(ham,spa_length,mu,eta)
+            klist,X,Y=gen_ksq(FSmesh,kz)
+            klist1,blist=mk_kf(FSmesh,True,2,kz)
+            ham1=sc.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
+    else:
+        klist,spa_length,xticks=mk_klist(k_list,N)
+
+    if sw_plot_veloc: #caclilate velocities
+        if sw_FS:
+            veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
         else:
-            if sw_FS:
-                if sw_plot_veloc:
-                    plot_vec2(veloc,klist)
-                else:
-                    eig,uni=gen_eig(ham,mass,mu,True)
-                    uni=sc.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham1,blist)])
-                    plot_FS(uni,klist1,olist,eig,X,Y,sw_color)
-            else:
-                eig,uni=gen_eig(ham,mass,mu,True)
-                plot_band(eig,spa_length,xticks,uni,olist)
+            veloc=sc.array([get_vec(k,rvec,ham_r,ndegen) for k in klist])
+            abs_veloc=sc.array([[sc.sqrt((v*v).sum()) for v in vv] for vv in veloc]).T
+            veloc=sc.array([get_vec(k,rvec,ham_r,ndegen).T for k in klist]).T
+    else:
+        ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
+
+    if spectrum: #plot spectrum
+        if sw_FS:
+            plot_FSsp(ham,mu,X,Y,eta)
+        else:
+            plot_spectrum(ham,spa_length,mu,eta)
+        exit()
+
+    if sw_FS: #plot eigen value
+        if sw_plot_veloc:
+            plot_vec2(veloc,klist)
+        else:
+            eig,uni=gen_eig(ham,mass,mu,True)
+            uni=sc.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham1,blist)])
+            plot_FS(uni,klist1,olist,eig,X,Y,sw_color)
+    else:
+        eig,uni=gen_eig(ham,mass,mu,True)
+        plot_band(eig,spa_length,xticks,uni,olist)
 
 __license__="""Copyright (c) 2018-2019 K. Suzuki
 Released under the MIT license
