@@ -14,6 +14,18 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
+option=2
+"""
+option: switch calculation modes
+0: band plot
+1: write Fermi surface at kz=0
+2: write 3D Fermi surface
+3: write Fermi velocity with Fermi surface
+4: plot spectrum like band plot
+5: plot spectrum at E=EF
+6: plot 3D Fermi velocity with Fermi surface
+"""
+
 sw_calc_mu =True
 fill=3.05
 
@@ -31,22 +43,6 @@ sw_color=True        #plot band or FS with orbital weight
 kz=sc.pi*0.
 with_spin=False #use only with soc hamiltonian
 
-option=4
-"""
-option: switch calculation modes
-0:band plot
-1: write Fermi surface at kz=0
-2: write 3D Fermi surface
-3: write Fermi velocity with Fermi surface
-4: plot spectrum like band plot
-5: plot spectrum at E=EF
-6: plot 3D Fermi velocity with Fermi surface
-"""
-
-spectrum=(True if option in (4,5) else False)
-sw_FS=(True if option in (1,3,5) else False)
-sw_plot_veloc=(True if option in (3,6) else False)
-sw_3dfs=(True if option in (2,6) else False)
 #----------import modules without scipy-------------
 import scipy.linalg as sclin
 import scipy.optimize as scopt
@@ -454,52 +450,39 @@ if __name__=="__main__":
         rvec1=sc.array([Arot.T.dot(r) for r in rvec])
         rvec=rvec1
 
-    if sw_3dfs:
-        if sw_plot_veloc:
-            klist,blist=mk_kf(FSmesh,True,3)
-            veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
-            plot_veloc_FS(veloc,klist)
-        else:
-            gen_3d_fs_plot(FSmesh)
-        exit()
-
-    if sw_FS: #get kpoint on Fermi Surface
-        if sw_plot_veloc:
-            klist,blist=mk_kf(FSmesh,True,2,kz)
-        else:
+    if option in (0,1,4,5):
+        if option in (0,4):
+            klist,spa_length,xticks=mk_klist(k_list,N)
+        else: #1,5
             klist,X,Y=gen_ksq(FSmesh,kz)
             klist1,blist=mk_kf(FSmesh,True,2,kz)
             ham1=sc.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
-    else:
-        klist,spa_length,xticks=mk_klist(k_list,N)
-
-    if sw_plot_veloc: #caclilate velocities
-        if sw_FS:
-            veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
-        else:
-            veloc=sc.array([get_vec(k,rvec,ham_r,ndegen) for k in klist])
-            abs_veloc=sc.array([[sc.sqrt((v*v).sum()) for v in vv] for vv in veloc]).T
-            veloc=sc.array([get_vec(k,rvec,ham_r,ndegen).T for k in klist]).T
-    else:
         ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
-
-    if spectrum: #plot spectrum
-        if sw_FS:
-            plot_FSsp(ham,mu,X,Y,eta)
-        else:
-            plot_spectrum(ham,spa_length,mu,eta)
-        exit()
-
-    if sw_FS: #plot eigen value
-        if sw_plot_veloc:
-            plot_vec2(veloc,klist)
-        else:
+        if option in (0,1):
             eig,uni=gen_eig(ham,mass,mu,True)
-            uni=sc.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham1,blist)])
-            plot_FS(uni,klist1,olist,eig,X,Y,sw_color)
-    else:
-        eig,uni=gen_eig(ham,mass,mu,True)
+
+    if option==0: #band plot
         plot_band(eig,spa_length,xticks,uni,olist)
+    elif option==1: #write Fermi surface at kz=0
+        uni=sc.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham1,blist)])
+        plot_FS(uni,klist1,olist,eig,X,Y,sw_color)
+    elif option==2: #write 3D Fermi surface
+        gen_3d_fs_plot(FSmesh)
+    elif option==3: #write Fermi velocity with Fermi surface
+        klist,blist=mk_kf(FSmesh,True,2,kz)
+        veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
+        #veloc=sc.array([get_vec(k,rvec,ham_r,ndegen) for k in klist])
+        #abs_veloc=sc.array([[sc.sqrt((v*v).sum()) for v in vv] for vv in veloc]).T
+        #veloc=sc.array([get_vec(k,rvec,ham_r,ndegen).T for k in klist]).T
+        plot_vec2(veloc,klist)
+    elif option==4: #plot spectrum like band plot
+        plot_spectrum(ham,spa_length,mu,eta)
+    elif option==5: #plot spectrum at E=EF
+        plot_FSsp(ham,mu,X,Y,eta)
+    elif option==6: #plot 3D Fermi velocity with Fermi surface
+        klist,blist=mk_kf(FSmesh,True,3)
+        veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
+        plot_veloc_FS(veloc,klist)
 
 __license__="""Copyright (c) 2018-2019 K. Suzuki
 Released under the MIT license
