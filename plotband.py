@@ -24,12 +24,14 @@ option: switch calculation modes
 4: plot spectrum like band plot
 5: plot spectrum at E=EF
 6: plot 3D Fermi velocity with Fermi surface
+7: calc conductivity
 """
 
-sw_calc_mu =True
+sw_calc_mu =False
 fill=3.05
 
-alatt=sc.array([3.96*sc.sqrt(2.),3.96*sc.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
+alatt=sc.array([1.,1.,1.]) #Bravais lattice parameter a,b,c
+#alatt=sc.array([3.96*sc.sqrt(2.),3.96*sc.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
 Arot=sc.array([[ .5,-.5, .5],[ .5, .5, .5],[-.5,-.5, .5]]) #rotation matrix for dec. to primitive vector
 k_list=[[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. points
 xlabel=['$\Gamma$','X','M','$\Gamma$'] #sym. points name
@@ -44,6 +46,7 @@ kz=sc.pi*0.
 with_spin=False #use only with soc hamiltonian
 
 #----------import modules without scipy-------------
+from scipy import absolute as abs
 import scipy.linalg as sclin
 import scipy.optimize as scopt
 import scipy.constants as scconst
@@ -109,6 +112,7 @@ def get_vec(k,rvec,ham_r,ndegen):
     vec: velocity in k for each bands
     """
     ihbar=1./scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e-10
+    #ihbar=1.
     ham,expk,no,nr=get_ham(k,rvec,ham_r,ndegen,out_phase=True)
     uni=sclin.eigh(ham)[1]
     vec0=sc.array([-1j*ihbar*(ham_r.reshape(no*no,nr)*(r*expk)).sum(axis=1).reshape(no,no)
@@ -155,13 +159,13 @@ def mk_klist(k_list,N):
     xticks=[]
     for ks,ke in zip(k_list,k_list[1:]):
         dkv=sc.array(ke)-sc.array(ks)
-        dkv_length=sc.sqrt(((dkv*alatt)*(dkv*alatt)).sum())
-        tmp=[2.*sc.pi*(dkv/N*i+ks) for i in range(N)]
-        tmp2=sc.linspace(0,dkv_length,N)+maxsplen*N/(N-1)
+        dkv_length=sc.sqrt(((dkv*alatt)**2).sum())
+        tmp=2.*sc.pi*sc.linspace(ks,ke,N)
+        tmp2=sc.linspace(0,dkv_length,N)+maxsplen
         maxsplen=tmp2.max()
         xticks=xticks+[tmp2[0]]
-        klist=klist+tmp
-        splen=splen+list(tmp2)
+        klist=klist+list(tmp[:-1])
+        splen=splen+list(tmp2[:-1])
     klist=klist+[2*sc.pi*sc.array(k_list[-1])]
     splen=splen+[maxsplen+dkv_length/N]
     xticks=xticks+[splen[-1]]
@@ -177,13 +181,14 @@ def plot_band(eig,spl,xticks,uni,ol):
     uni: weight of orbitals
     ol: plot orbital list
     """
+    def get_col(cl,ol):
+        col=(sc.absolute(cl[ol])**2 if isinstance(ol,int)
+             else (sc.absolute(cl[ol])**2).sum(axis=0)).round(4)
+        return col
     for e,cl in zip(eig,uni):
-        c1=((abs(cl[ol[0]])*abs(cl[ol[0]])).round(4) if isinstance(ol[0],int)
-            else (abs(cl[ol[0]])*abs(cl[ol[0]])).sum(axis=0).round(4))
-        c2=((abs(cl[ol[1]])*abs(cl[ol[1]])).round(4) if isinstance(ol[1],int)
-            else (abs(cl[ol[1]])*abs(cl[ol[1]])).sum(axis=0).round(4))
-        c3=((abs(cl[ol[2]])*abs(cl[ol[2]])).round(4) if isinstance(ol[2],int)
-            else (abs(cl[ol[2]])*abs(cl[ol[2]])).sum(axis=0).round(4))
+        c1=get_col(cl,ol[0])
+        c2=get_col(cl,ol[1])
+        c3=get_col(cl,ol[2])
         clist=sc.array([c1,c2,c3]).T
         plt.scatter(spl,e,s=5,c=clist)
     for x in xticks[1:-1]:
@@ -230,9 +235,18 @@ def gen_ksq(mesh,kz):
     kz: kz of plotting FS plane
     """
     x=sc.linspace(-sc.pi,sc.pi,mesh,True)
-    sqmesh=mesh*mesh
     X,Y=sc.meshgrid(x,x)
     return sc.array([X.ravel(),Y.ravel(),Y.ravel()*0.0+kz]).T,X,Y
+
+def make_kmesh(mesh,dim,kz=0):
+    km=sc.linspace(-sc.pi,sc.pi,mesh+1,True)
+    if dim==2:
+        x,y=sc.meshgrid(km,km)
+        z=y*0.0+kz
+    elif dim==3:
+        x,y,z=sc.meshgrid(km,km,km)
+    klist=sc.array([x.ravel(),y.ravel(),z.ravel()]).T
+    return(klist)
 
 def mk_kf(mesh,sw_bnum,dim,kz=0):
     """
@@ -248,13 +262,7 @@ def mk_kf(mesh,sw_bnum,dim,kz=0):
     """
     import skimage as sk
     from mpl_toolkits.mplot3d import axes3d
-    km=sc.linspace(-sc.pi,sc.pi,mesh+1,True)
-    if dim==2:
-        x,y=sc.meshgrid(km,km)
-        z=y*0.0+kz
-    elif dim==3:
-        x,y,z=sc.meshgrid(km,km,km)
-    klist=sc.array([x.ravel(),y.ravel(),z.ravel()]).T
+    klist=make_kmesh(mesh,dim,kz)
     ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
     eig=sc.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
     v2=[]
@@ -317,19 +325,19 @@ def plot_veloc_FS(vfs,kfs):
     ax=fig.add_subplot(111,projection='3d')
     vf,kf=[],[]
     for v,k in zip(vfs,kfs):
-        ave_vx=abs(sc.array(v).T[0]).mean()
-        ave_vy=abs(sc.array(v).T[1]).mean()
-        ave_vz=abs(sc.array(v).T[2]).mean()
-        print '%.3e %.3e %.3e'%(ave_vx,ave_vy,ave_vz)
+        ave_vx=sc.absolute(sc.array(v).T[0]).mean()
+        ave_vy=sc.absolute(sc.array(v).T[1]).mean()
+        ave_vz=sc.absolute(sc.array(v).T[2]).mean()
+        print('%.3e %.3e %.3e'%(ave_vx,ave_vy,ave_vz))
         vf.extend(v)
         kf.extend(k)
     x,y,z=zip(*sc.array(kf))
     vf=sc.array(vf)
-    ave_vx=abs(vf.T[0]).mean()
-    ave_vy=abs(vf.T[1]).mean()
-    ave_vz=abs(vf.T[2]).mean()
-    print '%.3e %.3e %.3e'%(ave_vx,ave_vy,ave_vz)
-    absv=sc.array([abs(v).sum() for v in vf])
+    ave_vx=sc.absolute(vf.T[0]).mean()
+    ave_vy=sc.absolute(vf.T[1]).mean()
+    ave_vz=sc.absolute(vf.T[2]).mean()
+    print('%.3e %.3e %.3e'%(ave_vx,ave_vy,ave_vz))
+    absv=sc.array([sc.absolute(v).sum() for v in vf])
     fs=ax.scatter(x,y,z,c=absv,cmap=cm.jet)
     ax.set_xlim(-sc.pi, sc.pi)
     ax.set_ylim(-sc.pi, sc.pi)
@@ -341,7 +349,7 @@ def plot_vec2(veloc,klist):
     v=[]
     k=[]
     for vv,kk in zip(veloc,klist):
-        v0=sc.array([sc.sqrt((abs(v0)*abs(v0)).sum()) for v0 in vv])
+        v0=sc.array([sc.sqrt((sc.absolute(v0)**2).sum()) for v0 in vv])
         v.extend(v0)
         k.extend(kk)
     v=sc.array(v)
@@ -355,7 +363,7 @@ def plot_vec2(veloc,klist):
     plt.colorbar(format='%.2e')
     plt.show()
 
-def plot_FS(uni,klist,ol,eig,X,Y,sw_color):
+def plot_FS(uni,klist,ol,eig,X,Y,sw_color,ncut=8):
     """
     This function plot 2D Fermi Surface with/without orbital weight
     argument:
@@ -367,27 +375,29 @@ def plot_FS(uni,klist,ol,eig,X,Y,sw_color):
     Y: Y axis array
     sw_color: swtich of color plot
     """
+    def get_col(cl,ol):
+        col=(sc.absolute(cl[:,ol])**2 if isinstance(ol,int)
+             else (sc.absolute(cl[:,ol])**2).sum(axis=0)).round(4)
+        return col
     fig=plt.figure()
     ax=fig.add_subplot(111,aspect='equal')
     if sw_color:
         col=['r','g','b','c','m','y','k','w']
-        ncut=8
         for kk,cl,cb in zip(klist,uni,col):
             cl=sc.array(cl)
-            c1=((abs(cl[:,ol[0]])*abs(cl[:,ol[0]])).round(4) if isinstance(ol[0],int)
-                else (abs(cl[:,ol[0]])*abs(cl[:,ol[0]])).sum(axis=1).round(4))
-            c2=((abs(cl[:,ol[1]])*abs(cl[:,ol[1]])).round(4) if isinstance(ol[1],int)
-                else (abs(cl[:,ol[1]])*abs(cl[:,ol[1]])).sum(axis=1).round(4))
-            c3=((abs(cl[:,ol[2]])*abs(cl[:,ol[2]])).round(4) if isinstance(ol[2],int)
-                else (abs(cl[:,ol[2]])*abs(cl[:,ol[2]])).sum(axis=1).round(4))
+            c1=get_col(cl,ol[0])
+            c2=get_col(cl,ol[1])
+            c3=get_col(cl,ol[2])
             clist=sc.array([c1,c2,c3]).T
             if(with_spin):
-                v1=((cl[:,no/2:]*cl[:,:no/2].conjugate()).sum(axis=1)
-                    +(cl[:,:no/2]*cl[:,no/2:].conjugate()).sum(axis=1)).real
-                v2=((cl[:,no/2:]*cl[:,:no/2].conjugate()).sum(axis=1)
-                    -(cl[:,:no/2]*cl[:,no/2:].conjugate()).sum(axis=1)).imag
+                vud=cl[:,no//2:]*cl[:,:no//2].conjugate()
+                vdu=cl[:,:no//2]*cl[:,no//2:].conjugate()
+                v1=(vud+vdu).sum(axis=1).real
+                v2=(vud-vdu).sum(axis=1).imag
+                #v3=(abs(cl[:,:no//2])**2-abs(cl[:,no//2:])**2).sum(axis=1).real
                 v1=v1[::ncut].round(4)
                 v2=v2[::ncut].round(4)
+                #v3=v3[::ncut].round(4)
                 k1=kk[::ncut,0]
                 k2=kk[::ncut,1]
                 plt.quiver(k1,k2,v1,v2,color=cb,angles='xy',scale_units='xy',scale=3.0)
@@ -427,6 +437,14 @@ def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
     fig.colorbar(cont)
     plt.show()
 
+def get_conductivity(klist,temp=1.0e-3):
+    ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
+    eig=sc.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
+    dfermi=0.25*(1.-sc.tanh(0.5*eig/temp))*(1.+sc.tanh(0.5*eig/temp))/temp
+    veloc=sc.array([get_vec(k,rvec,ham_r,ndegen).real for k in klist])
+    sigma=sc.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/len(klist)
+    print(sigma)
+
 #--------------------------main program-------------------------------
 if __name__=="__main__":
     if sw_inp==0: #.input file
@@ -436,7 +454,7 @@ if __name__=="__main__":
     elif sw_inp==2:
         rvec,ndegen,ham_r,no,nr=input_ham.import_hr(fname,False)
     else: #Hopping.dat file
-        rvec,ndegen,ham_r,no,nr,axis=input_ham.import_Hopping(False)
+        rvec,ndegen,ham_r,no,nr,axis=input_ham.import_Hopping(False,True)
 
     if sw_calc_mu:
         mu=get_mu(fill,rvec,ham_r,ndegen)
@@ -471,9 +489,6 @@ if __name__=="__main__":
     elif option==3: #write Fermi velocity with Fermi surface
         klist,blist=mk_kf(FSmesh,True,2,kz)
         veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
-        #veloc=sc.array([get_vec(k,rvec,ham_r,ndegen) for k in klist])
-        #abs_veloc=sc.array([[sc.sqrt((v*v).sum()) for v in vv] for vv in veloc]).T
-        #veloc=sc.array([get_vec(k,rvec,ham_r,ndegen).T for k in klist]).T
         plot_vec2(veloc,klist)
     elif option==4: #plot spectrum like band plot
         plot_spectrum(ham,spa_length,mu,eta)
@@ -483,6 +498,9 @@ if __name__=="__main__":
         klist,blist=mk_kf(FSmesh,True,3)
         veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
         plot_veloc_FS(veloc,klist)
+    elif option==7:
+        klist=make_kmesh(FSmesh,3)
+        get_conductivity(klist,temp=1.0e-3)
 
 __license__="""Copyright (c) 2018-2019 K. Suzuki
 Released under the MIT license
