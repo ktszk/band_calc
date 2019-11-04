@@ -38,7 +38,7 @@ xlabel=['$\Gamma$','X','M','$\Gamma$'] #sym. points name
 
 olist=[1,2,3]        #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
 N=100                #kmesh btween symmetry points
-FSmesh=100           #kmesh for option in {1,2,3,5,6}
+FSmesh=40           #kmesh for option in {1,2,3,5,6}
 eta=1.0e-1           #eta for green function
 sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
@@ -260,7 +260,7 @@ def mk_kf(mesh,sw_bnum,dim,kz=0):
     v2: klist on Fermi surface
     fsband: band number crossing Fermi energy
     """
-    import skimage as sk
+    import skimage.measure as sk
     from mpl_toolkits.mplot3d import axes3d
     klist=make_kmesh(mesh,dim,kz)
     ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
@@ -271,7 +271,7 @@ def mk_kf(mesh,sw_bnum,dim,kz=0):
     for i,e in enumerate(eig):
         if(e.max()*e.min() < 0. ):
             if dim==2:
-                cont=sk.measure.find_contours(e.reshape(mesh+1,mesh+1),0)
+                cont=sk.find_contours(e.reshape(mesh+1,mesh+1),0)
                 ct0=[]
                 for c in cont:
                     ct0.extend(c)
@@ -283,7 +283,7 @@ def mk_kf(mesh,sw_bnum,dim,kz=0):
                 else:
                     v2.extend(ct)
             elif dim==3:
-                vertices,faces,normals,values=sk.measure.marching_cubes_lewiner(e.reshape(mesh+1,mesh+1,mesh+1),0)
+                vertices,faces,normals,values=sk.marching_cubes_lewiner(e.reshape(mesh+1,mesh+1,mesh+1),0)
                 if sw_bnum:
                     fsband.append(i)
                     v2.append((vertices-mesh/2)*2*sc.pi/mesh)
