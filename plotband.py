@@ -14,7 +14,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=7
+option=0
 """
 option: switch calculation modes
 0: band plot
@@ -439,6 +439,9 @@ def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
     plt.show()
 
 def get_conductivity(klist,rvec,ham_r,ndegen,temp=1.0e-3):
+    """
+    this function calculates conductivity at tau==1 from Boltzmann equation in metal
+    """
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
     eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
     dfermi=0.25*(1.-np.tanh(0.5*eig/temp))*(1.+np.tanh(0.5*eig/temp))/temp
