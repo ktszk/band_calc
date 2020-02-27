@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
-import scipy as sc
+import numpy as np
 
 fname='000AsP.input' #hamiltonian file name
 mu=9.8               #chemical potential
@@ -14,7 +14,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=2
+option=7
 """
 option: switch calculation modes
 0: band plot
@@ -30,9 +30,9 @@ option: switch calculation modes
 sw_calc_mu =False
 fill=3.05
 
-alatt=sc.array([1.,1.,1.]) #Bravais lattice parameter a,b,c
-#alatt=sc.array([3.96*sc.sqrt(2.),3.96*sc.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
-Arot=sc.array([[ .5,-.5, .5],[ .5, .5, .5],[-.5,-.5, .5]]) #rotation matrix for dec. to primitive vector
+alatt=np.array([1.,1.,1.]) #Bravais lattice parameter a,b,c
+#alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
+Arot=np.array([[ .5,-.5, .5],[ .5, .5, .5],[-.5,-.5, .5]]) #rotation matrix for dec. to primitive vector
 k_list=[[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. points
 xlabel=['$\Gamma$','X','M','$\Gamma$'] #sym. points name
 
@@ -42,11 +42,10 @@ FSmesh=40           #kmesh for option in {1,2,3,5,6}
 eta=1.0e-1           #eta for green function
 sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
-kz=sc.pi*0.
+kz=np.pi*0.
 with_spin=False #use only with soc hamiltonian
 
 #----------import modules without scipy-------------
-from scipy import absolute as abs
 import scipy.linalg as sclin
 import scipy.optimize as scopt
 import scipy.constants as scconst
@@ -68,7 +67,7 @@ def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     expk: phase in k
     """
     phase=(rvec*k).sum(axis=1)
-    expk=(sc.cos(phase)-1j*sc.sin(phase))/ndegen
+    expk=(np.cos(phase)-1j*np.sin(phase))/ndegen
     no,nr=len(ham_r),len(expk)
     ham=(ham_r.reshape(no*no,nr)*expk).sum(axis=1).reshape(no,no)
     if out_phase:
@@ -89,12 +88,12 @@ def get_mu(fill,rvec,ham_r,ndegen,temp=1.0e-3,mesh=40):
     return value:
     mu: chemical potential
     """
-    km=sc.linspace(-sc.pi,sc.pi,mesh+1,True)
-    x,y,z=sc.meshgrid(km,km,km)
-    klist=sc.array([x.ravel(),y.ravel(),z.ravel()]).T
-    ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
-    eig=sc.array([sclin.eigvalsh(h) for h in ham]).T
-    f=lambda mu: 2.*fill*(mesh**3)+(sc.tanh(0.5*(eig-mu)/temp)-1.).sum()
+    km=np.linspace(-np.pi,np.pi,mesh+1,True)
+    x,y,z=np.meshgrid(km,km,km)
+    klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
+    ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
+    eig=np.array([sclin.eigvalsh(h) for h in ham]).T
+    f=lambda mu: 2.*fill*(mesh**3)+(np.tanh(0.5*(eig-mu)/temp)-1.).sum()
     #mu=scopt.brentq(f,eig.min(),eig.max())
     mu=scopt.newton(f,0.5*(eig.min()+eig.max()))
     print('chemical potential = %6.3f'%mu)
@@ -115,9 +114,9 @@ def get_vec(k,rvec,ham_r,ndegen):
     #ihbar=1.
     ham,expk,no,nr=get_ham(k,rvec,ham_r,ndegen,out_phase=True)
     uni=sclin.eigh(ham)[1]
-    vec0=sc.array([-1j*ihbar*(ham_r.reshape(no*no,nr)*(r*expk)).sum(axis=1).reshape(no,no)
+    vec0=np.array([-1j*ihbar*(ham_r.reshape(no*no,nr)*(r*expk)).sum(axis=1).reshape(no,no)
                     for r in (alatt*rvec).T])
-    vec=sc.array([(uni.conjugate().T.dot(v0).dot(uni)).diagonal() for v0 in vec0]).T
+    vec=np.array([(uni.conjugate().T.dot(v0).dot(uni)).diagonal() for v0 in vec0]).T
     return vec
 
 def gen_eig(ham,mass,mu,sw):
@@ -134,12 +133,12 @@ def gen_eig(ham,mass,mu,sw):
     """
     if sw:
         etmp=[sclin.eigh(h) for h in ham]
-        eigtmp=sc.array([eg[0] for eg in etmp])
+        eigtmp=np.array([eg[0] for eg in etmp])
         eig=eigtmp.T/mass-mu
-        uni=sc.array([eg[1] for eg in etmp]).T
+        uni=np.array([eg[1] for eg in etmp]).T
         return eig,uni
     else:
-        eigtmp=sc.array([sclin.eigvalsh(h) for h in ham])
+        eigtmp=np.array([sclin.eigvalsh(h) for h in ham])
         return (eigtmp.max()/mass-mu),(eigtmp.min()/mass-mu)
 
 def mk_klist(k_list,N):
@@ -158,18 +157,18 @@ def mk_klist(k_list,N):
     maxsplen=0
     xticks=[]
     for ks,ke in zip(k_list,k_list[1:]):
-        dkv=sc.array(ke)-sc.array(ks)
-        dkv_length=sc.sqrt(((dkv*alatt)**2).sum())
-        tmp=2.*sc.pi*sc.linspace(ks,ke,N)
-        tmp2=sc.linspace(0,dkv_length,N)+maxsplen
+        dkv=np.array(ke)-np.array(ks)
+        dkv_length=np.sqrt(((dkv*alatt)**2).sum())
+        tmp=2.*np.pi*np.linspace(ks,ke,N)
+        tmp2=np.linspace(0,dkv_length,N)+maxsplen
         maxsplen=tmp2.max()
         xticks=xticks+[tmp2[0]]
         klist=klist+list(tmp[:-1])
         splen=splen+list(tmp2[:-1])
-    klist=klist+[2*sc.pi*sc.array(k_list[-1])]
+    klist=klist+[2*np.pi*np.array(k_list[-1])]
     splen=splen+[maxsplen+dkv_length/N]
     xticks=xticks+[splen[-1]]
-    return sc.array(klist),sc.array(splen),xticks
+    return np.array(klist),np.array(splen),xticks
 
 def plot_band(eig,spl,xticks,uni,ol):
     """
@@ -182,14 +181,14 @@ def plot_band(eig,spl,xticks,uni,ol):
     ol: plot orbital list
     """
     def get_col(cl,ol):
-        col=(sc.absolute(cl[ol])**2 if isinstance(ol,int)
-             else (sc.absolute(cl[ol])**2).sum(axis=0)).round(4)
+        col=(np.abs(cl[ol])**2 if isinstance(ol,int)
+             else (np.abs(cl[ol])**2).sum(axis=0)).round(4)
         return col
     for e,cl in zip(eig,uni):
         c1=get_col(cl,ol[0])
         c2=get_col(cl,ol[1])
         c3=get_col(cl,ol[2])
-        clist=sc.array([c1,c2,c3]).T
+        clist=np.array([c1,c2,c3]).T
         plt.scatter(spl,e,s=5,c=clist)
     for x in xticks[1:-1]:
         plt.axvline(x,ls='-',lw=0.25,color='black')
@@ -198,7 +197,7 @@ def plot_band(eig,spl,xticks,uni,ol):
     plt.xticks(xticks,xlabel)
     plt.show()
 
-def plot_spectrum(ham,klen,mu,eta0=5.e-2,de=100,smesh=200):
+def plot_spectrum(ham,klen,xticks,mu,eta0=5.e-2,de=100,smesh=200):
     """
     This function plot spaghetti like spectrum.
     arguments:
@@ -210,13 +209,14 @@ def plot_spectrum(ham,klen,mu,eta0=5.e-2,de=100,smesh=200):
     smesh: contor mesh (optional, default=200)
     """
     emax,emin=gen_eig(ham,mass,mu,False)
-    w=sc.linspace(emin*1.1,emax*1.1,de)
+    w=np.linspace(emin*1.1,emax*1.1,de)
+    no=len(ham[0])
     #eta=w*0+eta0
     etamax=4.0e0
     eta=etamax*w*w/min(emax*emax,emin*emin)+eta0
-    G=sc.array([[-sclin.inv((ww+mu+et*1j)*sc.identity(no)-h) for h in ham] for ww,et in zip(w,eta)])
-    trG=sc.array([[sc.trace(gg).imag/(no*no) for gg in g] for g in G])
-    sp,w=sc.meshgrid(klen,w)
+    G=np.array([[-sclin.inv((ww+mu+et*1j)*np.identity(no)-h) for h in ham] for ww,et in zip(w,eta)])
+    trG=np.array([[np.trace(gg).imag/(no*no) for gg in g] for g in G])
+    sp,w=np.meshgrid(klen,w)
     plt.hot()
     plt.contourf(sp,w,trG,smesh)
     plt.colorbar()
@@ -234,21 +234,21 @@ def gen_ksq(mesh,kz):
     mesh: k-mesh grid size
     kz: kz of plotting FS plane
     """
-    x=sc.linspace(-sc.pi,sc.pi,mesh,True)
-    X,Y=sc.meshgrid(x,x)
-    return sc.array([X.ravel(),Y.ravel(),Y.ravel()*0.0+kz]).T,X,Y
+    x=np.linspace(-np.pi,np.pi,mesh,True)
+    X,Y=np.meshgrid(x,x)
+    return np.array([X.ravel(),Y.ravel(),Y.ravel()*0.0+kz]).T,X,Y
 
 def make_kmesh(mesh,dim,kz=0):
-    km=sc.linspace(-sc.pi,sc.pi,mesh+1,True)
+    km=np.linspace(-np.pi,np.pi,mesh+1,True)
     if dim==2:
-        x,y=sc.meshgrid(km,km)
+        x,y=np.meshgrid(km,km)
         z=y*0.0+kz
     elif dim==3:
-        x,y,z=sc.meshgrid(km,km,km)
-    klist=sc.array([x.ravel(),y.ravel(),z.ravel()]).T
+        x,y,z=np.meshgrid(km,km,km)
+    klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
     return(klist)
 
-def mk_kf(mesh,sw_bnum,dim,kz=0):
+def mk_kf(mesh,sw_bnum,dim,rvec,ham_r,ndegen,kz=0):
     """
     This function generates k-list on Fermi surfaces
     arguments:
@@ -263,8 +263,8 @@ def mk_kf(mesh,sw_bnum,dim,kz=0):
     import skimage.measure as sk
     from mpl_toolkits.mplot3d import axes3d
     klist=make_kmesh(mesh,dim,kz)
-    ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
-    eig=sc.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
+    ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
+    eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
     v2=[]
     if sw_bnum:
         fsband=[]
@@ -275,7 +275,7 @@ def mk_kf(mesh,sw_bnum,dim,kz=0):
                 ct0=[]
                 for c in cont:
                     ct0.extend(c)
-                ct=(sc.array([[c[0],c[1],+mesh/2] for c in ct0])-mesh/2)*2*sc.pi/mesh
+                ct=(np.array([[c[0],c[1],+mesh/2] for c in ct0])-mesh/2)*2*np.pi/mesh
                 ct[:,2]=kz
                 if sw_bnum:
                     fsband.append(i)
@@ -286,14 +286,14 @@ def mk_kf(mesh,sw_bnum,dim,kz=0):
                 vertices,faces,normals,values=sk.marching_cubes_lewiner(e.reshape(mesh+1,mesh+1,mesh+1),0)
                 if sw_bnum:
                     fsband.append(i)
-                    v2.append((vertices-mesh/2)*2*sc.pi/mesh)
+                    v2.append((vertices-mesh/2)*2*np.pi/mesh)
                     #v3.append(faces)
                 else:
-                    v2.extend((2*sc.pi*(vertices-mesh/2)/mesh)[faces])
+                    v2.extend((2*np.pi*(vertices-mesh/2)/mesh)[faces])
     if sw_bnum:
         return v2,fsband
     else:
-        return sc.array(v2)
+        return np.array(v2)
 
 def gen_3d_fs_plot(mesh):
     """
@@ -308,9 +308,9 @@ def gen_3d_fs_plot(mesh):
     ax=fig.add_subplot(111,projection='3d')
     m = Poly3DCollection(vert)
     ax.add_collection3d(m)
-    ax.set_xlim(-sc.pi, sc.pi)
-    ax.set_ylim(-sc.pi, sc.pi)
-    ax.set_zlim(-sc.pi, sc.pi)
+    ax.set_xlim(-np.pi, np.pi)
+    ax.set_ylim(-np.pi, np.pi)
+    ax.set_zlim(-np.pi, np.pi)
     plt.tight_layout()
     plt.show()
 
@@ -325,23 +325,23 @@ def plot_veloc_FS(vfs,kfs):
     ax=fig.add_subplot(111,projection='3d')
     vf,kf=[],[]
     for v,k in zip(vfs,kfs):
-        ave_vx=sc.absolute(sc.array(v).T[0]).mean()
-        ave_vy=sc.absolute(sc.array(v).T[1]).mean()
-        ave_vz=sc.absolute(sc.array(v).T[2]).mean()
+        ave_vx=np.abs(np.array(v).T[0]).mean()
+        ave_vy=np.abs(np.array(v).T[1]).mean()
+        ave_vz=np.abs(np.array(v).T[2]).mean()
         print('%.3e %.3e %.3e'%(ave_vx,ave_vy,ave_vz))
         vf.extend(v)
         kf.extend(k)
-    x,y,z=zip(*sc.array(kf))
-    vf=sc.array(vf)
-    ave_vx=sc.absolute(vf.T[0]).mean()
-    ave_vy=sc.absolute(vf.T[1]).mean()
-    ave_vz=sc.absolute(vf.T[2]).mean()
+    x,y,z=zip(*np.array(kf))
+    vf=np.array(vf)
+    ave_vx=np.abs(vf.T[0]).mean()
+    ave_vy=np.abs(vf.T[1]).mean()
+    ave_vz=np.abs(vf.T[2]).mean()
     print('%.3e %.3e %.3e'%(ave_vx,ave_vy,ave_vz))
-    absv=sc.array([sc.absolute(v).sum() for v in vf])
+    absv=np.array([np.abs(v).sum() for v in vf])
     fs=ax.scatter(x,y,z,c=absv,cmap=cm.jet)
-    ax.set_xlim(-sc.pi, sc.pi)
-    ax.set_ylim(-sc.pi, sc.pi)
-    ax.set_zlim(-sc.pi, sc.pi)
+    ax.set_xlim(-np.pi, np.pi)
+    ax.set_ylim(-np.pi, np.pi)
+    ax.set_zlim(-np.pi, np.pi)
     plt.colorbar(fs,format='%.2e')
     plt.show()
 
@@ -349,17 +349,17 @@ def plot_vec2(veloc,klist):
     v=[]
     k=[]
     for vv,kk in zip(veloc,klist):
-        v0=sc.array([sc.sqrt((sc.absolute(v0)**2).sum()) for v0 in vv])
+        v0=np.array([np.sqrt((np.abs(v0)**2).sum()) for v0 in vv])
         v.extend(v0)
         k.extend(kk)
-    v=sc.array(v)
-    k=sc.array(k)
+    v=np.array(v)
+    k=np.array(k)
     plt.scatter(k[:,0],k[:,1],s=1.0,c=v)
     plt.jet()
-    plt.xlim(-sc.pi,sc.pi)
-    plt.ylim(-sc.pi,sc.pi)
-    plt.xticks([-sc.pi,0,sc.pi],['-$\pi$','0','$\pi$'])
-    plt.yticks([-sc.pi,0,sc.pi],['-$\pi$','0','$\pi$'])
+    plt.xlim(-np.pi,np.pi)
+    plt.ylim(-np.pi,np.pi)
+    plt.xticks([-np.pi,0,np.pi],['-$\pi$','0','$\pi$'])
+    plt.yticks([-np.pi,0,np.pi],['-$\pi$','0','$\pi$'])
     plt.colorbar(format='%.2e')
     plt.show()
 
@@ -376,19 +376,19 @@ def plot_FS(uni,klist,ol,eig,X,Y,sw_color,ncut=8):
     sw_color: swtich of color plot
     """
     def get_col(cl,ol):
-        col=(sc.absolute(cl[:,ol])**2 if isinstance(ol,int)
-             else (sc.absolute(cl[:,ol])**2).sum(axis=0)).round(4)
+        col=(np.abs(cl[:,ol])**2 if isinstance(ol,int)
+             else (np.abs(cl[:,ol])**2).sum(axis=0)).round(4)
         return col
     fig=plt.figure()
     ax=fig.add_subplot(111,aspect='equal')
     if sw_color:
         col=['r','g','b','c','m','y','k','w']
         for kk,cl,cb in zip(klist,uni,col):
-            cl=sc.array(cl)
+            cl=np.array(cl)
             c1=get_col(cl,ol[0])
             c2=get_col(cl,ol[1])
             c3=get_col(cl,ol[2])
-            clist=sc.array([c1,c2,c3]).T
+            clist=np.array([c1,c2,c3]).T
             if(with_spin):
                 vud=cl[:,no//2:]*cl[:,:no//2].conjugate()
                 vdu=cl[:,:no//2]*cl[:,no//2:].conjugate()
@@ -406,10 +406,10 @@ def plot_FS(uni,klist,ol,eig,X,Y,sw_color,ncut=8):
         for en in eig:
             if(en.max()*en.min()<0.0):
                 plt.contour(X,Y,en.reshape(FSmesh,FSmesh),levels=[0.],color='black')
-    plt.xlim(-sc.pi,sc.pi)
-    plt.ylim(-sc.pi,sc.pi)
-    plt.xticks([-sc.pi,0,sc.pi],['-$\pi$','0','$\pi$'])
-    plt.yticks([-sc.pi,0,sc.pi],['-$\pi$','0','$\pi$'])
+    plt.xlim(-np.pi,np.pi)
+    plt.ylim(-np.pi,np.pi)
+    plt.xticks([-np.pi,0,np.pi],['-$\pi$','0','$\pi$'])
+    plt.yticks([-np.pi,0,np.pi],['-$\pi$','0','$\pi$'])
     plt.show()
 
 def plot_vec(veloc,eig,X,Y):
@@ -423,30 +423,30 @@ def plot_vec(veloc,eig,X,Y):
         plt.show()
 
 def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
-    G=sc.array([-sclin.inv((0.+mu+eta*1j)*sc.identity(no)-h) for h in ham])
-    trG=sc.array([sc.trace(gg).imag/(no*no) for gg in G]).reshape(FSmesh,FSmesh)
-    #trG=sc.array([(gg[4,4]+gg[9,9]).imag/(no*no) for gg in G]).reshape(FSmesh,FSmesh)
+    no=len(ham[0])
+    G=np.array([-sclin.inv((0.+mu+eta*1j)*np.identity(no)-h) for h in ham])
+    trG=np.array([np.trace(gg).imag/(no*no) for gg in G]).reshape(FSmesh,FSmesh)
+    #trG=np.array([(gg[4,4]+gg[9,9]).imag/(no*no) for gg in G]).reshape(FSmesh,FSmesh)
 
     fig=plt.figure()
     ax=fig.add_subplot(111,aspect='equal')
-    ax.set_xticks([-sc.pi,0,sc.pi])
+    ax.set_xticks([-np.pi,0,np.pi])
     ax.set_xticklabels(['-$\pi$','0','$\pi$'])
-    ax.set_yticks([-sc.pi,0,sc.pi])
+    ax.set_yticks([-np.pi,0,np.pi])
     ax.set_yticklabels(['-$\pi$','0','$\pi$'])
     cont=ax.contourf(X,Y,trG,smesh,cmap=plt.jet())
     fig.colorbar(cont)
     plt.show()
 
-def get_conductivity(klist,temp=1.0e-3):
-    ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
-    eig=sc.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
-    dfermi=0.25*(1.-sc.tanh(0.5*eig/temp))*(1.+sc.tanh(0.5*eig/temp))/temp
-    veloc=sc.array([get_vec(k,rvec,ham_r,ndegen).real for k in klist])
-    sigma=sc.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/len(klist)
+def get_conductivity(klist,rvec,ham_r,ndegen,temp=1.0e-3):
+    ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
+    eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
+    dfermi=0.25*(1.-np.tanh(0.5*eig/temp))*(1.+np.tanh(0.5*eig/temp))/temp
+    veloc=np.array([get_vec(k,rvec,ham_r,ndegen).real for k in klist])
+    sigma=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/len(klist)
     print(sigma)
 
-#--------------------------main program-------------------------------
-if __name__=="__main__":
+def main():
     if sw_inp==0: #.input file
         rvec,ndegen,ham_r,no,nr=input_ham.import_out(fname,False)
     elif sw_inp==1: #rvec.txt, ham_r.txt, ndegen.txt files
@@ -465,7 +465,7 @@ if __name__=="__main__":
             mu=get_mu(fill,rvec,ham_r,ndegen)
 
     if sw_dec_axis:
-        rvec1=sc.array([Arot.T.dot(r) for r in rvec])
+        rvec1=np.array([Arot.T.dot(r) for r in rvec])
         rvec=rvec1
 
     if option in (0,1,4,5):
@@ -473,35 +473,37 @@ if __name__=="__main__":
             klist,spa_length,xticks=mk_klist(k_list,N)
         else: #1,5
             klist,X,Y=gen_ksq(FSmesh,kz)
-            klist1,blist=mk_kf(FSmesh,True,2,kz)
-            ham1=sc.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
-        ham=sc.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
+            klist1,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,kz)
+            ham1=np.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
+        ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
         if option in (0,1):
             eig,uni=gen_eig(ham,mass,mu,True)
 
     if option==0: #band plot
         plot_band(eig,spa_length,xticks,uni,olist)
     elif option==1: #write Fermi surface at kz=0
-        uni=sc.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham1,blist)])
+        uni=np.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham1,blist)])
         plot_FS(uni,klist1,olist,eig,X,Y,sw_color)
     elif option==2: #write 3D Fermi surface
         gen_3d_fs_plot(FSmesh)
     elif option==3: #write Fermi velocity with Fermi surface
-        klist,blist=mk_kf(FSmesh,True,2,kz)
+        klist,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,kz)
         veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
         plot_vec2(veloc,klist)
     elif option==4: #plot spectrum like band plot
-        plot_spectrum(ham,spa_length,mu,eta)
+        plot_spectrum(ham,spa_length,xticks,mu,eta)
     elif option==5: #plot spectrum at E=EF
         plot_FSsp(ham,mu,X,Y,eta)
     elif option==6: #plot 3D Fermi velocity with Fermi surface
-        klist,blist=mk_kf(FSmesh,True,3)
+        klist,blist=mk_kf(FSmesh,True,3,rvec,ham_r,ndegen)
         veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
         plot_veloc_FS(veloc,klist)
     elif option==7:
         klist=make_kmesh(FSmesh,3)
-        get_conductivity(klist,temp=1.0e-3)
-
+        get_conductivity(klist,rvec,ham_r,ndegen,temp=1.0e-3)
+#--------------------------main program-------------------------------
+if __name__=="__main__":
+    main()
 __license__="""Copyright (c) 2018-2019 K. Suzuki
 Released under the MIT license
 http://opensource.org/licenses/mit-license.php
