@@ -14,7 +14,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=0
+option=2
 """
 option: switch calculation modes
 0: band plot
@@ -295,7 +295,7 @@ def mk_kf(mesh,sw_bnum,dim,rvec,ham_r,ndegen,kz=0):
     else:
         return np.array(v2)
 
-def gen_3d_fs_plot(mesh):
+def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen):
     """
     This function plot 3D Fermi Surface
     argument:
@@ -303,7 +303,7 @@ def gen_3d_fs_plot(mesh):
     """
     from mpl_toolkits.mplot3d import axes3d
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-    vert=mk_kf(mesh,False,3)
+    vert=mk_kf(mesh,False,3,rvec,ham_r,ndegen)
     fig=plt.figure()
     ax=fig.add_subplot(111,projection='3d')
     m = Poly3DCollection(vert)
@@ -488,7 +488,7 @@ def main():
         uni=np.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham1,blist)])
         plot_FS(uni,klist1,olist,eig,X,Y,sw_color)
     elif option==2: #write 3D Fermi surface
-        gen_3d_fs_plot(FSmesh)
+        gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen)
     elif option==3: #write Fermi velocity with Fermi surface
         klist,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,kz)
         veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
