@@ -27,7 +27,7 @@ option: switch calculation modes
 7: calc conductivity
 """
 
-sw_calc_mu =False
+sw_calc_mu =True
 fill=3.05
 
 alatt=np.array([1.,1.,1.]) #Bravais lattice parameter a,b,c
@@ -38,8 +38,8 @@ xlabel=['$\Gamma$','X','M','$\Gamma$'] #sym. points name
 
 olist=[1,2,3]        #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
 N=100                #kmesh btween symmetry points
-FSmesh=40           #kmesh for option in {1,2,3,5,6}
-eta=1.0e-1           #eta for green function
+FSmesh=50           #kmesh for option in {1,2,3,5,6}
+eta=5.0e-2           #eta for green function
 sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
 kz=np.pi*0.
@@ -88,12 +88,12 @@ def get_mu(fill,rvec,ham_r,ndegen,temp=1.0e-3,mesh=40):
     return value:
     mu: chemical potential
     """
-    km=np.linspace(-np.pi,np.pi,mesh+1,True)
+    km=np.linspace(0,2*np.pi,mesh,True)
     x,y,z=np.meshgrid(km,km,km)
     klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
     eig=np.array([sclin.eigvalsh(h) for h in ham]).T
-    f=lambda mu: 2.*fill*(mesh**3)+(np.tanh(0.5*(eig-mu)/temp)-1.).sum()
+    f=lambda mu: 2.*fill*mesh**3+(np.tanh(0.5*(eig-mu)/temp)-1.).sum()
     #mu=scopt.brentq(f,eig.min(),eig.max())
     mu=scopt.newton(f,0.5*(eig.min()+eig.max()))
     print('chemical potential = %6.3f'%mu)
@@ -248,7 +248,7 @@ def make_kmesh(mesh,dim,kz=0):
     klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
     return(klist)
 
-def mk_kf(mesh,sw_bnum,dim,rvec,ham_r,ndegen,kz=0):
+def mk_kf(mesh,sw_bnum,dim,rvec,ham_r,ndegen,mu,kz=0):
     """
     This function generates k-list on Fermi surfaces
     arguments:
@@ -295,7 +295,7 @@ def mk_kf(mesh,sw_bnum,dim,rvec,ham_r,ndegen,kz=0):
     else:
         return np.array(v2)
 
-def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen):
+def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu):
     """
     This function plot 3D Fermi Surface
     argument:
@@ -303,7 +303,7 @@ def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen):
     """
     from mpl_toolkits.mplot3d import axes3d
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-    vert=mk_kf(mesh,False,3,rvec,ham_r,ndegen)
+    vert=mk_kf(mesh,False,3,rvec,ham_r,ndegen,mu)
     fig=plt.figure()
     ax=fig.add_subplot(111,projection='3d')
     m = Poly3DCollection(vert)
@@ -438,7 +438,7 @@ def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
     fig.colorbar(cont)
     plt.show()
 
-def get_conductivity(klist,rvec,ham_r,ndegen,temp=1.0e-3):
+def get_conductivity(klist,rvec,ham_r,ndegen,mu,temp=1.0e-3):
     """
     this function calculates conductivity at tau==1 from Boltzmann equation in metal
     """
@@ -479,7 +479,7 @@ def main():
             klist,spa_length,xticks=mk_klist(k_list,N)
         else: #1,5
             klist,X,Y=gen_ksq(FSmesh,kz)
-            klist1,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,kz)
+            klist1,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,mu,kz)
             ham1=np.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
         ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
         if option in (0,1):
@@ -491,9 +491,9 @@ def main():
         uni=np.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham1,blist)])
         plot_FS(uni,klist1,olist,eig,X,Y,sw_color)
     elif option==2: #write 3D Fermi surface
-        gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen)
+        gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu)
     elif option==3: #write Fermi velocity with Fermi surface
-        klist,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,kz)
+        klist,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,mu,kz)
         veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
         plot_vec2(veloc,klist)
     elif option==4: #plot spectrum like band plot
@@ -501,12 +501,12 @@ def main():
     elif option==5: #plot spectrum at E=EF
         plot_FSsp(ham,mu,X,Y,eta)
     elif option==6: #plot 3D Fermi velocity with Fermi surface
-        klist,blist=mk_kf(FSmesh,True,3,rvec,ham_r,ndegen)
+        klist,blist=mk_kf(FSmesh,True,3,rvec,ham_r,ndegen,mu)
         veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
         plot_veloc_FS(veloc,klist)
     elif option==7:
         klist=make_kmesh(FSmesh,3)
-        get_conductivity(klist,rvec,ham_r,ndegen,temp=1.0e-3)
+        get_conductivity(klist,rvec,ham_r,ndegen,mu,temp=1.0e-3)
 #--------------------------main program-------------------------------
 if __name__=="__main__":
     main()
