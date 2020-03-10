@@ -14,7 +14,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=2
+option=7
 """
 option: switch calculation modes
 0: band plot
@@ -444,10 +444,13 @@ def get_conductivity(klist,rvec,ham_r,ndegen,temp=1.0e-3):
     """
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
     eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
-    dfermi=0.25*(1.-np.tanh(0.5*eig/temp))*(1.+np.tanh(0.5*eig/temp))/temp
+    dfermi=0.25*(1.-np.tanh(0.5*eig/temp)**2)/temp
     veloc=np.array([get_vec(k,rvec,ham_r,ndegen).real for k in klist])
     sigma=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/len(klist)
+    kappa=np.array([[(vk1*vk2*eig**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/(temp*len(klist))
     print(sigma)
+    print(kappa)
+    print(kappa/(sigma*temp))
 
 def main():
     if sw_inp==0: #.input file
