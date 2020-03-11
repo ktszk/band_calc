@@ -28,7 +28,7 @@ option: switch calculation modes
 """
 
 sw_calc_mu =True
-fill=3.05
+fill=3.00
 
 alatt=np.array([1.,1.,1.]) #Bravais lattice parameter a,b,c
 #alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
@@ -38,7 +38,7 @@ xlabel=['$\Gamma$','X','M','$\Gamma$'] #sym. points name
 
 olist=[1,2,3]        #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
 N=100                #kmesh btween symmetry points
-FSmesh=50           #kmesh for option in {1,2,3,5,6}
+FSmesh=40           #kmesh for option in {1,2,3,5,6}
 eta=5.0e-2           #eta for green function
 sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
@@ -442,15 +442,19 @@ def get_conductivity(klist,rvec,ham_r,ndegen,mu,temp=1.0e-3):
     """
     this function calculates conductivity at tau==1 from Boltzmann equation in metal
     """
+    kb=scconst.physical_constants['Boltzmann constant in eV/K'][0] #temp=kBT[eV], so it need to convert eV>K
+    #kb=1.
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
     eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
     dfermi=0.25*(1.-np.tanh(0.5*eig/temp)**2)/temp
     veloc=np.array([get_vec(k,rvec,ham_r,ndegen).real for k in klist])
     sigma=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/len(klist)
-    kappa=np.array([[(vk1*vk2*eig**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/(temp*len(klist))
+    #l12=kb*np.array([[(vk1*vk2*eig*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/(temp*len(klist))
+    kappa=kb*np.array([[(vk1*vk2*eig**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/(temp*len(klist))
+    #print(l12/sigma)
     print(sigma)
     print(kappa)
-    print(kappa/(sigma*temp))
+    print(kb*kappa/(sigma*temp))
 
 def main():
     if sw_inp==0: #.input file
