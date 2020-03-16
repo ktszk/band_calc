@@ -51,8 +51,13 @@ import scipy.optimize as scopt
 import scipy.constants as scconst
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+from mpi4py import MPI
 import input_ham
 #----------------define functions-------------------
+comm=MPI.COMM_WORLD
+size=comm.Get_size()
+rank=comm.Get_rank()
+
 def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     """
     This function generates hamiltonian from hopping parameters.
@@ -88,15 +93,36 @@ def get_mu(fill,rvec,ham_r,ndegen,temp=1.0e-3,mesh=40):
     return value:
     mu: chemical potential
     """
-    km=np.linspace(0,2*np.pi,mesh,False)
-    x,y,z=np.meshgrid(km,km,km)
-    klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
-    ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
-    eig=np.array([sclin.eigvalsh(h) for h in ham]).T
-    f=lambda mu: 2.*fill*mesh**3+(np.tanh(0.5*(eig-mu)/temp)-1.).sum()
-    #mu=scopt.brentq(f,eig.min(),eig.max())
-    mu=scopt.newton(f,0.5*(eig.min()+eig.max()))
-    print('chemical potential = %6.3f'%mu)
+
+    Nk=None
+    sendbuf=None
+    if rank==0:
+        km=np.linspace(0,2*np.pi,mesh,False)
+        x,y,z=np.meshgrid(km,km,km)
+        klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
+        Nk=len(klist)
+        sendbuf=klist.flatten()
+    Nk=comm.bcast(Nk,root=0)
+    recvbuf=np.empty([3*Nk//size],dtype='f8')
+    comm.Scatter(sendbuf,recvbuf, root=0)
+    k_mpi=recvbuf.reshape(len(recvbuf)//3,3)
+    ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
+    e_mpi=np.array([sclin.eigvalsh(h) for h in ham]).T
+    sendbuf=e_mpi.flatten()
+    recvbuf=None
+    if rank==0:
+        recvbuf=np.empty(sendbuf.size*size,dtype='f8')
+    comm.Gather(sendbuf,recvbuf,root=0)
+    if rank==0:
+        no=len(recvbuf)//Nk
+        eig=recvbuf.reshape(Nk,no)
+        f=lambda mu: 2.*fill*mesh**3+(np.tanh(0.5*(eig-mu)/temp)-1.).sum()
+        #mu=scopt.brentq(f,eig.min(),eig.max())
+        mu=scopt.newton(f,0.5*(eig.min()+eig.max()))
+        print('chemical potential = %6.3f'%mu)
+    else:
+        mu=None
+    mu=comm.bcast(mu,root=0)
     return mu
 
 def get_vec(k,rvec,ham_r,ndegen):
@@ -444,30 +470,60 @@ def get_conductivity(mesh,rvec,ham_r,ndegen,mu,temp=1.0e-3):
     """
     kb=scconst.physical_constants['Boltzmann constant in eV/K'][0] #temp=kBT[eV], so it need to convert eV>K
     #kb=1.
-    km=np.linspace(0,2*np.pi,mesh,False)
-    x,y,z=np.meshgrid(km,km,km)
-    klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
-    ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
+    Nk=None
+    sendbuf=None
+    if rank==0:
+        km=np.linspace(0,2*np.pi,mesh,False)
+        x,y,z=np.meshgrid(km,km,km)
+        klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
+        Nk=len(klist)
+        sendbuf=klist.flatten()
+    Nk=comm.bcast(Nk,root=0)
+    recvbuf=np.empty([Nk*3//size],dtype='f8')
+    comm.Scatter(sendbuf,recvbuf, root=0)
+    k_mpi=recvbuf.reshape(len(recvbuf)//3,3)
+    ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
     dfermi=0.25*(1.-np.tanh(0.5*eig/temp)**2)/temp
-    veloc=np.array([get_vec(k,rvec,ham_r,ndegen).real for k in klist])
-    sigma=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/len(klist)
-    #l12=kb*np.array([[(vk1*vk2*eig*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/(temp*len(klist))
-    kappa=kb*np.array([[(vk1*vk2*eig**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/(temp*len(klist))
-    #print(l12/sigma)
-    print(sigma)
-    print(kappa)
-    print(kb*kappa/(sigma*temp))
+    veloc=np.array([get_vec(k,rvec,ham_r,ndegen).real for k in k_mpi])
+    sigma=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/Nk
+    kappa=kb*np.array([[(vk1*vk2*eig**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/(temp*Nk)
+    #l12=kb*np.array([[(vk1*vk2*eig*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/(temp*Nk)
+
+    sigma=comm.allreduce(sigma,MPI.SUM)
+    kappa=comm.allreduce(kappa,MPI.SUM)
+    #l12=comm.allreduce(l12,MPI.SUM)
+    if rank==0:
+        print(sigma)
+        print(kappa)
+        print(kb*kappa/(sigma*temp))
 
 def main():
-    if sw_inp==0: #.input file
-        rvec,ndegen,ham_r,no,nr=input_ham.import_out(fname,False)
-    elif sw_inp==1: #rvec.txt, ham_r.txt, ndegen.txt files
-        rvec,ndegen,ham_r,no,nr=input_ham.import_hop(fname,True,False)
-    elif sw_inp==2:
-        rvec,ndegen,ham_r,no,nr=input_ham.import_hr(fname,False)
-    else: #Hopping.dat file
-        rvec,ndegen,ham_r,no,nr,axis=input_ham.import_Hopping(False,True)
+    if rank==0:
+        if sw_inp==0: #.input file
+            rvec,ndegen,ham_r,no,nr=input_ham.import_out(fname,False)
+        elif sw_inp==1: #rvec.txt, ham_r.txt, ndegen.txt files
+            rvec,ndegen,ham_r,no,nr=input_ham.import_hop(fname,True,False)
+        elif sw_inp==2:
+            rvec,ndegen,ham_r,no,nr=input_ham.import_hr(fname,False)
+        elif sw_inp==3: #Hopping.dat file
+            rvec,ndegen,ham_r,no,nr,axis=input_ham.import_Hopping(False,True)
+        else:
+            pass
+    else:
+        no=None
+        nr=None
+    no=comm.bcast(no,root=0)
+    nr=comm.bcast(nr,root=0)
+    if rank!=0:
+        rvec=np.empty([nr,3],dtype='f8')
+        ndegen=np.empty(nr,dtype='f8')
+        ham_r=np.empty([no,no,nr],dtype='c16')
+    comm.Bcast(rvec,root=0)
+    comm.Bcast(ndegen,root=0)
+    comm.Bcast(ham_r,root=0)
+    if sw_inp==3:
+        comm.Bcast(axis,root=0)
 
     if sw_calc_mu:
         mu=get_mu(fill,rvec,ham_r,ndegen)

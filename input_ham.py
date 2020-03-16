@@ -21,7 +21,7 @@ def import_out(fname,sw_hoplist=True):
     data=np.loadtxt(fname)
     con=(data[:,:3]==data[0,:3]).prod(axis=1).sum()
     no,nr =int(np.sqrt(con)),data[:,0].size//con
-    rvec=data[:nr,:3]
+    rvec=np.array(data[:nr,:3])
     ham_r=(data[:,3]+1j*data[:,4]).reshape((nr,no,no) if sw_hoplist else (no,no,nr))
     ndegen=np.ones(nr)
     return(rvec,ndegen,ham_r,no,nr)
