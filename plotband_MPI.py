@@ -80,6 +80,28 @@ def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     else:
         return ham
 
+def gen_klist(mesh):
+    if rank==0:
+        km=np.linspace(0,2*np.pi,mesh,False)
+        x,y,z=np.meshgrid(km,km,km)
+        klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
+        Nk=len(klist)
+        sendbuf=klist.flatten()
+        cks=divmod(sendbuf.size//3,size)
+        count=np.array([3*(cks[0]+1) if i<cks[1] else 3*cks[0] for i in range(size)])
+        displ=np.array([sum(count[:i]) for i in range(size)])
+    else:
+        Nk=None
+        sendbuf=None
+        count=np.empty(size,dtype=np.int)
+        displ=None
+    comm.Bcast(count,root=0)
+    Nk=comm.bcast(Nk,root=0)
+    recvbuf=np.empty(count[rank],dtype='f8')
+    comm.Scatterv([sendbuf,count,displ,MPI.DOUBLE],recvbuf, root=0)
+    k_mpi=recvbuf.reshape(count[rank]//3,3)
+    return (Nk,count//3,k_mpi)
+
 def get_mu(fill,rvec,ham_r,ndegen,temp=1.0e-3,mesh=40):
     """
     This function calculates chemical potential.
@@ -94,25 +116,20 @@ def get_mu(fill,rvec,ham_r,ndegen,temp=1.0e-3,mesh=40):
     mu: chemical potential
     """
 
-    Nk=None
-    sendbuf=None
-    if rank==0:
-        km=np.linspace(0,2*np.pi,mesh,False)
-        x,y,z=np.meshgrid(km,km,km)
-        klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
-        Nk=len(klist)
-        sendbuf=klist.flatten()
-    Nk=comm.bcast(Nk,root=0)
-    recvbuf=np.empty([3*Nk//size],dtype='f8')
-    comm.Scatter(sendbuf,recvbuf, root=0)
-    k_mpi=recvbuf.reshape(len(recvbuf)//3,3)
+    Nk,count,k_mpi=gen_klist(mesh)
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     e_mpi=np.array([sclin.eigvalsh(h) for h in ham]).T
     sendbuf=e_mpi.flatten()
-    recvbuf=None
     if rank==0:
-        recvbuf=np.empty(sendbuf.size*size,dtype='f8')
-    comm.Gather(sendbuf,recvbuf,root=0)
+        no=sendbuf.size//count[rank]
+        count=count*no
+        recvbuf=np.empty(count.sum(),dtype='f8')
+        displ=np.array([count[:i].sum() for i in range(size)])
+    else:
+        recvbuf=None
+        displ=None
+    comm.Bcast(count,root=0)
+    comm.Gatherv(sendbuf,[recvbuf,count,displ,MPI.DOUBLE],root=0)
     if rank==0:
         no=len(recvbuf)//Nk
         eig=recvbuf.reshape(Nk,no)
@@ -470,18 +487,8 @@ def get_conductivity(mesh,rvec,ham_r,ndegen,mu,temp=1.0e-3):
     """
     kb=scconst.physical_constants['Boltzmann constant in eV/K'][0] #temp=kBT[eV], so it need to convert eV>K
     #kb=1.
-    Nk=None
-    sendbuf=None
-    if rank==0:
-        km=np.linspace(0,2*np.pi,mesh,False)
-        x,y,z=np.meshgrid(km,km,km)
-        klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
-        Nk=len(klist)
-        sendbuf=klist.flatten()
-    Nk=comm.bcast(Nk,root=0)
-    recvbuf=np.empty([Nk*3//size],dtype='f8')
-    comm.Scatter(sendbuf,recvbuf, root=0)
-    k_mpi=recvbuf.reshape(len(recvbuf)//3,3)
+
+    Nk,count,k_mpi=gen_klist(mesh)
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
     dfermi=0.25*(1.-np.tanh(0.5*eig/temp)**2)/temp
