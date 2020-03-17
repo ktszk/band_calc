@@ -14,7 +14,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=7
+option=1
 """
 option: switch calculation modes
 0: band plot
@@ -227,18 +227,13 @@ def plot_spectrum(ham,klen,xticks,mu,eta0=5.e-2,de=100,smesh=200):
     plt.xticks(xticks,xlabel)
     plt.show()
 
-def gen_ksq(mesh,kz):
+def make_kmesh(mesh,dim,kz=0,sw=False):
     """
     This function generates square k mesh for 2D spectrum plot
     arguments:
     mesh: k-mesh grid size
     kz: kz of plotting FS plane
     """
-    x=np.linspace(-np.pi,np.pi,mesh,True)
-    X,Y=np.meshgrid(x,x)
-    return np.array([X.ravel(),Y.ravel(),Y.ravel()*0.0+kz]).T,X,Y
-
-def make_kmesh(mesh,dim,kz=0):
     km=np.linspace(-np.pi,np.pi,mesh+1,True)
     if dim==2:
         x,y=np.meshgrid(km,km)
@@ -246,7 +241,10 @@ def make_kmesh(mesh,dim,kz=0):
     elif dim==3:
         x,y,z=np.meshgrid(km,km,km)
     klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
-    return(klist)
+    if sw:
+        return(klist,x,y)
+    else:
+        return(klist)
 
 def mk_kf(mesh,sw_bnum,dim,rvec,ham_r,ndegen,mu,kz=0):
     """
@@ -485,7 +483,7 @@ def main():
         if option in (0,4):
             klist,spa_length,xticks=mk_klist(k_list,N)
         else: #1,5
-            klist,X,Y=gen_ksq(FSmesh,kz)
+            klist,X,Y=make_kmesh(FSmesh,2,kz=0,sw=True)
             klist1,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,mu,kz)
             ham1=np.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
         ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])

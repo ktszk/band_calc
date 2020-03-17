@@ -14,7 +14,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=7
+option=4
 """
 option: switch calculation modes
 0: band plot
@@ -37,9 +37,10 @@ k_list=[[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. p
 xlabel=['$\Gamma$','X','M','$\Gamma$'] #sym. points name
 
 olist=[1,2,3]        #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
-N=100                #kmesh btween symmetry points
+N=200                #kmesh btween symmetry points
 FSmesh=40           #kmesh for option in {1,2,3,5,6}
-eta=5.0e-2           #eta for green function
+wmesh=200
+eta=2.0e-2           #eta for green function
 sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
 kz=np.pi*0.
@@ -131,7 +132,6 @@ def get_mu(fill,rvec,ham_r,ndegen,temp=1.0e-3,mesh=40):
     comm.Bcast(count,root=0)
     comm.Gatherv(sendbuf,[recvbuf,count,displ,MPI.DOUBLE],root=0)
     if rank==0:
-        no=len(recvbuf)//Nk
         eig=recvbuf.reshape(Nk,no)
         f=lambda mu: 2.*fill*mesh**3+(np.tanh(0.5*(eig-mu)/temp)-1.).sum()
         #mu=scopt.brentq(f,eig.min(),eig.max())
@@ -252,36 +252,59 @@ def plot_spectrum(ham,klen,xticks,mu,eta0=5.e-2,de=100,smesh=200):
     smesh: contor mesh (optional, default=200)
     """
     emax,emin=gen_eig(ham,mass,mu,False)
-    w=np.linspace(emin*1.1,emax*1.1,de)
+    w_orig=np.linspace(emin*1.1,emax*1.1,de)
+    if rank==0:
+        sendbuf=w_orig
+        cks=divmod(sendbuf.size,size)
+        count=np.array([cks[0]+1 if i<cks[1] else cks[0] for i in range(size)])
+        displ=np.array([sum(count[:i]) for i in range(size)])
+    else:
+        sendbuf=None
+        count=np.empty(size,dtype=np.int)
+        displ=None
+    comm.Bcast(count,root=0)
+    recvbuf=np.empty(count[rank],dtype='f8')
+    comm.Scatterv([sendbuf,count,displ,MPI.DOUBLE],recvbuf, root=0)
+    w=recvbuf
     no=len(ham[0])
-    #eta=w*0+eta0
+    nk=len(ham)
+
     etamax=4.0e0
+    #eta=w*0+eta0
     eta=etamax*w*w/min(emax*emax,emin*emin)+eta0
     G=np.array([[-sclin.inv((ww+mu+et*1j)*np.identity(no)-h) for h in ham] for ww,et in zip(w,eta)])
     trG=np.array([[np.trace(gg).imag/(no*no) for gg in g] for g in G])
-    sp,w=np.meshgrid(klen,w)
-    plt.hot()
-    plt.contourf(sp,w,trG,smesh)
-    plt.colorbar()
-    for x in xticks[1:-1]:
-        plt.axvline(x,ls='-',lw=0.25,color='black')
-    plt.xlim(0,klen.max())
-    plt.axhline(0.,ls='--',lw=0.25,color='black')
-    plt.xticks(xticks,xlabel)
-    plt.show()
+    sendbuf=trG.flatten()
+    w=w_orig
+    if rank==0:
+        count=count*nk
+        recvbuf=np.empty(count.sum(),dtype='f8')
+        displ=np.array([count[:i].sum() for i in range(size)])
+    else:
+        recvbuf=None
+        displ=None
+    comm.Bcast(count,root=0)
+    comm.Gatherv(sendbuf,[recvbuf,count,displ,MPI.DOUBLE],root=0)
+    if rank==0:
+        sp,w=np.meshgrid(klen,w)
+        trG=recvbuf.reshape(de,nk)
+        plt.hot()
+        plt.contourf(sp,w,trG,smesh)
+        plt.colorbar()
+        for x in xticks[1:-1]:
+            plt.axvline(x,ls='-',lw=0.25,color='black')
+        plt.xlim(0,klen.max())
+        plt.axhline(0.,ls='--',lw=0.25,color='black')
+        plt.xticks(xticks,xlabel)
+        plt.show()
 
-def gen_ksq(mesh,kz):
+def make_kmesh(mesh,dim,kz=0,sw=False):
     """
-    This function generates square k mesh for 2D spectrum plot
+    This function generates square or cube k mesh
     arguments:
     mesh: k-mesh grid size
     kz: kz of plotting FS plane
     """
-    x=np.linspace(-np.pi,np.pi,mesh,True)
-    X,Y=np.meshgrid(x,x)
-    return np.array([X.ravel(),Y.ravel(),Y.ravel()*0.0+kz]).T,X,Y
-
-def make_kmesh(mesh,dim,kz=0):
     km=np.linspace(-np.pi,np.pi,mesh+1,True)
     if dim==2:
         x,y=np.meshgrid(km,km)
@@ -289,7 +312,10 @@ def make_kmesh(mesh,dim,kz=0):
     elif dim==3:
         x,y,z=np.meshgrid(km,km,km)
     klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
-    return(klist)
+    if sw:
+        return klist,x,y
+    else:
+        return(klist)
 
 def mk_kf(mesh,sw_bnum,dim,rvec,ham_r,ndegen,mu,kz=0):
     """
@@ -305,34 +331,67 @@ def mk_kf(mesh,sw_bnum,dim,rvec,ham_r,ndegen,mu,kz=0):
     """
     import skimage.measure as sk
     from mpl_toolkits.mplot3d import axes3d
-    klist=make_kmesh(mesh,dim,kz)
-    ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
-    eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
-    v2=[]
-    if sw_bnum:
-        fsband=[]
-    for i,e in enumerate(eig):
-        if(e.max()*e.min() < 0. ):
-            if dim==2:
-                cont=sk.find_contours(e.reshape(mesh+1,mesh+1),0)
-                ct0=[]
-                for c in cont:
-                    ct0.extend(c)
-                ct=(np.array([[c[0],c[1],+mesh/2] for c in ct0])-mesh/2)*2*np.pi/mesh
-                ct[:,2]=kz
-                if sw_bnum:
-                    fsband.append(i)
-                    v2.append(ct)
-                else:
-                    v2.extend(ct)
-            elif dim==3:
-                vertices,faces,normals,values=sk.marching_cubes_lewiner(e.reshape(mesh+1,mesh+1,mesh+1),0)
-                if sw_bnum:
-                    fsband.append(i)
-                    v2.append((vertices-mesh/2)*2*np.pi/mesh)
-                    #v3.append(faces)
-                else:
-                    v2.extend((2*np.pi*(vertices-mesh/2)/mesh)[faces])
+    if rank==0:
+        klist=make_kmesh(mesh,dim,kz,sw=False)
+        Nk=len(klist)
+        sendbuf=klist.flatten()
+        cks=divmod(sendbuf.size//3,size)
+        count=np.array([3*(cks[0]+1) if i<cks[1] else 3*cks[0] for i in range(size)])
+        displ=np.array([sum(count[:i]) for i in range(size)])
+    else:
+        Nk=None
+        sendbuf=None
+        count=np.empty(size,dtype=np.int)
+        displ=None
+    comm.Bcast(count,root=0)
+    Nk=comm.bcast(Nk,root=0)
+    recvbuf=np.empty(count[rank],dtype='f8')
+    comm.Scatterv([sendbuf,count,displ,MPI.DOUBLE],recvbuf, root=0)
+    count=count//3
+    k_mpi=recvbuf.reshape(count[rank],3)
+    ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
+    e_mpi=np.array([sclin.eigvalsh(h) for h in ham])/mass-mu
+    sendbuf=e_mpi.flatten()
+    if rank==0:
+        no=sendbuf.size//count[rank]
+        count=count*no
+        recvbuf=np.empty(count.sum(),dtype='f8')
+        displ=np.array([count[:i].sum() for i in range(size)])
+    else:
+        recvbuf=None
+        displ=None
+    comm.Bcast(count,root=0)
+    comm.Gatherv(sendbuf,[recvbuf,count,displ,MPI.DOUBLE],root=0)
+    if rank==0:
+        eig=recvbuf.reshape(Nk,no).T
+        v2=[]
+        if sw_bnum:
+            fsband=[]
+        for i,e in enumerate(eig):
+            if(e.max()*e.min() < 0. ):
+                if dim==2:
+                    cont=sk.find_contours(e.reshape(mesh+1,mesh+1),0)
+                    ct0=[]
+                    for c in cont:
+                        ct0.extend(c)
+                        ct=(np.array([[c[0],c[1],+mesh/2] for c in ct0])-mesh/2)*2*np.pi/mesh
+                    ct[:,2]=kz
+                    if sw_bnum:
+                        fsband.append(i)
+                        v2.append(ct)
+                    else:
+                        v2.extend(ct)
+                elif dim==3:
+                    vertices,faces,normals,values=sk.marching_cubes_lewiner(e.reshape(mesh+1,mesh+1,mesh+1),0)
+                    if sw_bnum:
+                        fsband.append(i)
+                        v2.append((vertices-mesh/2)*2*np.pi/mesh)
+                        #v3.append(faces)
+                    else:
+                        v2.extend((2*np.pi*(vertices-mesh/2)/mesh)[faces])
+    else:
+        v2=None
+        fsband=None
     if sw_bnum:
         return v2,fsband
     else:
@@ -347,15 +406,16 @@ def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu):
     from mpl_toolkits.mplot3d import axes3d
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
     vert=mk_kf(mesh,False,3,rvec,ham_r,ndegen,mu)
-    fig=plt.figure()
-    ax=fig.add_subplot(111,projection='3d')
-    m = Poly3DCollection(vert)
-    ax.add_collection3d(m)
-    ax.set_xlim(-np.pi, np.pi)
-    ax.set_ylim(-np.pi, np.pi)
-    ax.set_zlim(-np.pi, np.pi)
-    plt.tight_layout()
-    plt.show()
+    if rank==0:
+        fig=plt.figure()
+        ax=fig.add_subplot(111,projection='3d')
+        m = Poly3DCollection(vert)
+        ax.add_collection3d(m)
+        ax.set_xlim(-np.pi, np.pi)
+        ax.set_ylim(-np.pi, np.pi)
+        ax.set_zlim(-np.pi, np.pi)
+        plt.tight_layout()
+        plt.show()
 
 def plot_veloc_FS(vfs,kfs):
     """
@@ -548,7 +608,7 @@ def main():
         if option in (0,4):
             klist,spa_length,xticks=mk_klist(k_list,N)
         else: #1,5
-            klist,X,Y=gen_ksq(FSmesh,kz)
+            klist,X,Y=make_kmesh(FSmesh,2,kz,sw=True)
             klist1,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,mu,kz)
             ham1=np.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
         ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
@@ -556,24 +616,29 @@ def main():
             eig,uni=gen_eig(ham,mass,mu,True)
 
     if option==0: #band plot
-        plot_band(eig,spa_length,xticks,uni,olist)
+        if rank==0:
+            plot_band(eig,spa_length,xticks,uni,olist)
     elif option==1: #write Fermi surface at kz=0
-        uni=np.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham1,blist)])
-        plot_FS(uni,klist1,olist,eig,X,Y,sw_color)
+        if rank==0:
+            uni=np.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham1,blist)])
+            plot_FS(uni,klist1,olist,eig,X,Y,sw_color)
     elif option==2: #write 3D Fermi surface
         gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu)
     elif option==3: #write Fermi velocity with Fermi surface
         klist,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,mu,kz)
-        veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
-        plot_vec2(veloc,klist)
+        if rank==0:
+            veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
+            plot_vec2(veloc,klist)
     elif option==4: #plot spectrum like band plot
-        plot_spectrum(ham,spa_length,xticks,mu,eta)
+        plot_spectrum(ham,spa_length,xticks,mu,eta,wmesh)
     elif option==5: #plot spectrum at E=EF
-        plot_FSsp(ham,mu,X,Y,eta)
+        if rank==0:
+            plot_FSsp(ham,mu,X,Y,eta)
     elif option==6: #plot 3D Fermi velocity with Fermi surface
         klist,blist=mk_kf(FSmesh,True,3,rvec,ham_r,ndegen,mu)
-        veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
-        plot_veloc_FS(veloc,klist)
+        if rank==0:
+            veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
+            plot_veloc_FS(veloc,klist)
     elif option==7:
         get_conductivity(FSmesh,rvec,ham_r,ndegen,mu,temp=1.0e-3)
 #--------------------------main program-------------------------------
