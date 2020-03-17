@@ -423,7 +423,7 @@ def plot_vec(veloc,eig,X,Y):
 def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
     no=len(ham[0])
     G=np.array([-sclin.inv((0.+mu+eta*1j)*np.identity(no)-h) for h in ham])
-    trG=np.array([np.trace(gg).imag/(no*no) for gg in G]).reshape(FSmesh,FSmesh)
+    trG=np.array([np.trace(gg).imag/(no*no) for gg in G]).reshape(FSmesh+1,FSmesh+1)
     #trG=np.array([(gg[4,4]+gg[9,9]).imag/(no*no) for gg in G]).reshape(FSmesh,FSmesh)
 
     fig=plt.figure()
@@ -484,8 +484,6 @@ def main():
             klist,spa_length,xticks=mk_klist(k_list,N)
         else: #1,5
             klist,X,Y=make_kmesh(FSmesh,2,kz=0,sw=True)
-            klist1,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,mu,kz)
-            ham1=np.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
         ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
         if option in (0,1):
             eig,uni=gen_eig(ham,mass,mu,True)
@@ -493,6 +491,8 @@ def main():
     if option==0: #band plot
         plot_band(eig,spa_length,xticks,uni,olist)
     elif option==1: #write Fermi surface at kz=0
+        klist1,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,mu,kz)
+        ham1=np.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
         uni=np.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham1,blist)])
         plot_FS(uni,klist1,olist,eig,X,Y,sw_color)
     elif option==2: #write 3D Fermi surface

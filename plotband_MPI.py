@@ -14,7 +14,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=4
+option=5
 """
 option: switch calculation modes
 0: band plot
@@ -38,7 +38,7 @@ xlabel=['$\Gamma$','X','M','$\Gamma$'] #sym. points name
 
 olist=[1,2,3]        #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
 N=200                #kmesh btween symmetry points
-FSmesh=40           #kmesh for option in {1,2,3,5,6}
+FSmesh=200           #kmesh for option in {1,2,3,5,6}
 wmesh=200
 eta=2.0e-2           #eta for green function
 sw_dec_axis=False    #transform Cartesian axis
@@ -528,7 +528,7 @@ def plot_vec(veloc,eig,X,Y):
 def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
     no=len(ham[0])
     G=np.array([-sclin.inv((0.+mu+eta*1j)*np.identity(no)-h) for h in ham])
-    trG=np.array([np.trace(gg).imag/(no*no) for gg in G]).reshape(FSmesh,FSmesh)
+    trG=np.array([np.trace(gg).imag/(no*no) for gg in G]).reshape(FSmesh+1,FSmesh+1)
     #trG=np.array([(gg[4,4]+gg[9,9]).imag/(no*no) for gg in G]).reshape(FSmesh,FSmesh)
 
     fig=plt.figure()
@@ -609,17 +609,53 @@ def main():
             klist,spa_length,xticks=mk_klist(k_list,N)
         else: #1,5
             klist,X,Y=make_kmesh(FSmesh,2,kz,sw=True)
-            klist1,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,mu,kz)
-            ham1=np.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
-        ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
-        if option in (0,1):
-            eig,uni=gen_eig(ham,mass,mu,True)
+        if rank==0:
+            Nk=len(klist)
+            sendbuf=klist.flatten()
+            cks=divmod(sendbuf.size//3,size)
+            count=np.array([3*(cks[0]+1) if i<cks[1] else 3*cks[0] for i in range(size)])
+            displ=np.array([sum(count[:i]) for i in range(size)])
+        else:
+            Nk=None
+            sendbuf=None
+            count=np.empty(size,dtype=np.int)
+            displ=None
+        comm.Bcast(count,root=0)
+        Nk=comm.bcast(Nk,root=0)
+        recvbuf=np.empty(count[rank],dtype='f8')
+        comm.Scatterv([sendbuf,count,displ,MPI.DOUBLE],recvbuf, root=0)
+        count=count//3
+        k_mpi=recvbuf.reshape(count[rank],3)
+        ham_mpi=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
+        sendbuf=ham_mpi.flatten()
+        if rank==0:
+            count=count*no*no
+            recvbuf=np.empty(count.sum(),dtype='c16')
+            displ=np.array([count[:i].sum() for i in range(size)])
+        else:
+            recvbuf=None
+            displ=None
+        comm.Bcast(count,root=0)
+        comm.Gatherv(sendbuf,[recvbuf,count,displ,MPI.DOUBLE_COMPLEX],root=0)
+        if rank==0:
+            ham=recvbuf.reshape(Nk,no,no)
+            if option in (0,1):
+                eig,uni=gen_eig(ham,mass,mu,True)
+        else:
+            if option==4:
+                ham=np.empty([Nk,no,no],dtype='c16')
+            else:
+                ham=None
+            eig=None
+            uni=None
 
     if option==0: #band plot
         if rank==0:
             plot_band(eig,spa_length,xticks,uni,olist)
     elif option==1: #write Fermi surface at kz=0
+        klist1,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,mu,kz)
         if rank==0:
+            ham1=np.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
             uni=np.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham1,blist)])
             plot_FS(uni,klist1,olist,eig,X,Y,sw_color)
     elif option==2: #write 3D Fermi surface
@@ -630,6 +666,7 @@ def main():
             veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
             plot_vec2(veloc,klist)
     elif option==4: #plot spectrum like band plot
+        comm.Bcast(ham,root=0)
         plot_spectrum(ham,spa_length,xticks,mu,eta,wmesh)
     elif option==5: #plot spectrum at E=EF
         if rank==0:
