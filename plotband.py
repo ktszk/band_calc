@@ -14,7 +14,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=1
+option=8
 """
 option: switch calculation modes
 0: band plot
@@ -25,6 +25,7 @@ option: switch calculation modes
 5: plot spectrum at E=EF
 6: plot 3D Fermi velocity with Fermi surface
 7: calc conductivity
+8: plot Dos
 """
 
 sw_calc_mu =True
@@ -39,7 +40,7 @@ xlabel=['$\Gamma$','X','M','$\Gamma$'] #sym. points name
 olist=[1,2,3]        #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
 N=100                #kmesh btween symmetry points
 FSmesh=40           #kmesh for option in {1,2,3,5,6}
-eta=5.0e-2           #eta for green function
+eta=5.0e-3           #eta for green function
 sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
 kz=np.pi*0.
@@ -457,6 +458,19 @@ def get_conductivity(mesh,rvec,ham_r,ndegen,mu,temp=1.0e-3):
     print(kappa)
     print(kb*kappa/(sigma*temp))
 
+def plot_dos(mesh,rvec,ham_r,ndegen,mu,no,eta,de=200):
+    km=np.linspace(0,2*np.pi,mesh,False)
+    x,y,z=np.meshgrid(km,km,km)
+    klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
+    ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
+    eig=np.array([sclin.eigvalsh(h) for h in ham])-mu
+    emax=eig.max()
+    emin=eig.min()
+    w=np.linspace(emin*1.1,emax*1.1,de)
+    dos=np.array([(eta/((ww-eig)**2+eta**2)).sum() for ww in w])/len(klist)*eta
+    plt.plot(w,dos)
+    plt.ylim(0,dos.max()*1.2)
+    plt.show()
 def main():
     if sw_inp==0: #.input file
         rvec,ndegen,ham_r,no,nr=input_ham.import_out(fname,False)
@@ -511,6 +525,8 @@ def main():
         plot_veloc_FS(veloc,klist)
     elif option==7:
         get_conductivity(FSmesh,rvec,ham_r,ndegen,mu,temp=1.0e-3)
+    elif option==8:
+        plot_dos(FSmesh,rvec,ham_r,ndegen,mu,no,eta)
 #--------------------------main program-------------------------------
 if __name__=="__main__":
     main()

@@ -14,7 +14,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=5
+option=8
 """
 option: switch calculation modes
 0: band plot
@@ -25,6 +25,7 @@ option: switch calculation modes
 5: plot spectrum at E=EF
 6: plot 3D Fermi velocity with Fermi surface
 7: calc conductivity
+8: plot Dos
 """
 
 sw_calc_mu =True
@@ -38,9 +39,9 @@ xlabel=['$\Gamma$','X','M','$\Gamma$'] #sym. points name
 
 olist=[1,2,3]        #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
 N=200                #kmesh btween symmetry points
-FSmesh=200           #kmesh for option in {1,2,3,5,6}
+FSmesh=80           #kmesh for option in {1,2,3,5,6}
 wmesh=200
-eta=2.0e-2           #eta for green function
+eta=5.0e-3           #eta for green function
 sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
 kz=np.pi*0.
@@ -81,11 +82,14 @@ def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     else:
         return ham
 
-def gen_klist(mesh):
+def gen_klist(mesh,k_sw=True,dim=None):
     if rank==0:
-        km=np.linspace(0,2*np.pi,mesh,False)
-        x,y,z=np.meshgrid(km,km,km)
-        klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
+        if k_sw:
+            km=np.linspace(0,2*np.pi,mesh,False)
+            x,y,z=np.meshgrid(km,km,km)
+            klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
+        else:
+            klist=make_kmesh(mesh,dim,kz,sw=False)
         Nk=len(klist)
         sendbuf=klist.flatten()
         cks=divmod(sendbuf.size//3,size)
@@ -331,24 +335,7 @@ def mk_kf(mesh,sw_bnum,dim,rvec,ham_r,ndegen,mu,kz=0):
     """
     import skimage.measure as sk
     from mpl_toolkits.mplot3d import axes3d
-    if rank==0:
-        klist=make_kmesh(mesh,dim,kz,sw=False)
-        Nk=len(klist)
-        sendbuf=klist.flatten()
-        cks=divmod(sendbuf.size//3,size)
-        count=np.array([3*(cks[0]+1) if i<cks[1] else 3*cks[0] for i in range(size)])
-        displ=np.array([sum(count[:i]) for i in range(size)])
-    else:
-        Nk=None
-        sendbuf=None
-        count=np.empty(size,dtype=np.int)
-        displ=None
-    comm.Bcast(count,root=0)
-    Nk=comm.bcast(Nk,root=0)
-    recvbuf=np.empty(count[rank],dtype='f8')
-    comm.Scatterv([sendbuf,count,displ,MPI.DOUBLE],recvbuf, root=0)
-    count=count//3
-    k_mpi=recvbuf.reshape(count[rank],3)
+    Nk,count,k_mpi=gen_klist(mesh,False,dim)
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     e_mpi=np.array([sclin.eigvalsh(h) for h in ham])/mass-mu
     sendbuf=e_mpi.flatten()
@@ -565,6 +552,21 @@ def get_conductivity(mesh,rvec,ham_r,ndegen,mu,temp=1.0e-3):
         print(kappa)
         print(kb*kappa/(sigma*temp))
 
+def plot_dos(mesh,rvec,ham_r,ndegen,mu,no,eta,de=200):
+    Nk,count,k_mpi=gen_klist(mesh)
+    ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
+    eig=np.array([sclin.eigvalsh(h) for h in ham])-mu
+
+    emax=comm.allreduce(eig.max(),MPI.MAX)
+    emin=comm.allreduce(eig.min(),MPI.MIN)
+    w=np.linspace(emin*1.1,emax*1.1,de)
+    dos=eta*np.array([(eta/((ww-eig)**2+eta**2)).sum() for ww in w])/Nk
+    dos=comm.allreduce(dos,MPI.SUM)
+    if rank==0:
+        plt.plot(w,dos)
+        plt.ylim(0,dos.max()*1.2)
+        plt.show()
+
 def main():
     if rank==0:
         if sw_inp==0: #.input file
@@ -610,18 +612,15 @@ def main():
         else: #1,5
             klist,X,Y=make_kmesh(FSmesh,2,kz,sw=True)
         if rank==0:
-            Nk=len(klist)
             sendbuf=klist.flatten()
             cks=divmod(sendbuf.size//3,size)
             count=np.array([3*(cks[0]+1) if i<cks[1] else 3*cks[0] for i in range(size)])
             displ=np.array([sum(count[:i]) for i in range(size)])
         else:
-            Nk=None
             sendbuf=None
             count=np.empty(size,dtype=np.int)
             displ=None
         comm.Bcast(count,root=0)
-        Nk=comm.bcast(Nk,root=0)
         recvbuf=np.empty(count[rank],dtype='f8')
         comm.Scatterv([sendbuf,count,displ,MPI.DOUBLE],recvbuf, root=0)
         count=count//3
@@ -678,6 +677,8 @@ def main():
             plot_veloc_FS(veloc,klist)
     elif option==7:
         get_conductivity(FSmesh,rvec,ham_r,ndegen,mu,temp=1.0e-3)
+    elif option==8:
+        plot_dos(FSmesh,rvec,ham_r,ndegen,mu,no,eta,wmesh)
 #--------------------------main program-------------------------------
 if __name__=="__main__":
     main()
