@@ -1,5 +1,0 @@
-# need packages
-- numpy
-- scipy
-- matplotlib
-- mpi4py (for plotband_MPI.py)
