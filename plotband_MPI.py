@@ -2,10 +2,12 @@
 #-*- coding:utf-8 -*-
 import numpy as np
 
-fname='000AsP.input' #hamiltonian file name
+#fname='000AsP.input' #hamiltonian file name
+#fname='LiFeAs' #hamiltonian file name
+fname='FeS10'
 mu=9.8               #chemical potential
 mass=1.0             #effective mass
-sw_inp=0             #input hamiltonian format
+sw_inp=1             #input hamiltonian format
 """
 sw_inp: switch input hamiltonian's format
 0: .input file
@@ -14,7 +16,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=8
+option=1
 """
 option: switch calculation modes
 0: band plot
@@ -26,10 +28,11 @@ option: switch calculation modes
 6: plot 3D Fermi velocity with Fermi surface
 7: calc conductivity
 8: plot Dos
+9: calc carrier num.
 """
 
 sw_calc_mu =True
-fill=3.00
+fill=6.0
 
 alatt=np.array([1.,1.,1.]) #Bravais lattice parameter a,b,c
 #alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
@@ -39,7 +42,7 @@ xlabel=['$\Gamma$','X','M','$\Gamma$'] #sym. points name
 
 olist=[1,2,3]        #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
 N=200                #kmesh btween symmetry points
-FSmesh=80           #kmesh for option in {1,2,3,5,6}
+FSmesh=100           #kmesh for option in {1,2,3,5,6}
 wmesh=200
 eta=5.0e-3           #eta for green function
 sw_dec_axis=False    #transform Cartesian axis
@@ -552,6 +555,19 @@ def get_conductivity(mesh,rvec,ham_r,ndegen,mu,temp=1.0e-3):
         print(kappa)
         print(kb*kappa/(sigma*temp))
 
+def get_carrier_num(mesh,rvec,ham_r,ndegen,mu):
+    Nk,count,k_mpi=gen_klist(mesh)
+    ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
+    eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
+    for i,en in enumerate(eig):
+        num_hole=float(np.where(en>0)[0].size)/Nk
+        num_particle=float(np.where(en<=0)[0].size)/Nk
+
+        num_hole=comm.allreduce(num_hole,MPI.SUM)
+        num_particle=comm.allreduce(num_particle,MPI.SUM)
+        if(rank==0):
+            print(i+1,round(num_hole,4),round(num_particle,4))
+
 def plot_dos(mesh,rvec,ham_r,ndegen,mu,no,eta,de=200):
     Nk,count,k_mpi=gen_klist(mesh)
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
@@ -573,10 +589,12 @@ def main():
             rvec,ndegen,ham_r,no,nr=input_ham.import_out(fname,False)
         elif sw_inp==1: #rvec.txt, ham_r.txt, ndegen.txt files
             rvec,ndegen,ham_r,no,nr=input_ham.import_hop(fname,True,False)
+            ham_r=ham_r.flatten()
         elif sw_inp==2:
             rvec,ndegen,ham_r,no,nr=input_ham.import_hr(fname,False)
         elif sw_inp==3: #Hopping.dat file
-            rvec,ndegen,ham_r,no,nr,axis=input_ham.import_Hopping(False,True)
+            rvec,ndegen,ham_r,no,nr,axis=input_ham.import_Hopping(fname,False,True)
+            ham_r=ham_r.flatten()
         else:
             pass
     else:
@@ -587,11 +605,18 @@ def main():
     if rank!=0:
         rvec=np.empty([nr,3],dtype='f8')
         ndegen=np.empty(nr,dtype='f8')
-        ham_r=np.empty([no,no,nr],dtype='c16')
+        if sw_inp==0:
+            ham_r=np.empty([no,no,nr],dtype='c16')
+        else:
+            ham_r=np.empty([no*no*nr],dtype='c16')
     comm.Bcast(rvec,root=0)
     comm.Bcast(ndegen,root=0)
     comm.Bcast(ham_r,root=0)
+    if sw_inp!=0:
+        ham_r=ham_r.reshape(no,no,nr)
     if sw_inp==3:
+        if rank!=0:
+            axis=np.empty([3,3],dtype='f8')
         comm.Bcast(axis,root=0)
 
     if sw_calc_mu:
@@ -611,6 +636,7 @@ def main():
             klist,spa_length,xticks=mk_klist(k_list,N)
         else: #1,5
             klist,X,Y=make_kmesh(FSmesh,2,kz,sw=True)
+        Nk=len(klist)
         if rank==0:
             sendbuf=klist.flatten()
             cks=divmod(sendbuf.size//3,size)
@@ -679,6 +705,8 @@ def main():
         get_conductivity(FSmesh,rvec,ham_r,ndegen,mu,temp=1.0e-3)
     elif option==8:
         plot_dos(FSmesh,rvec,ham_r,ndegen,mu,no,eta,wmesh)
+    elif option==9:
+        get_carrier_num(FSmesh,rvec,ham_r,ndegen,mu)
 #--------------------------main program-------------------------------
 if __name__=="__main__":
     main()
