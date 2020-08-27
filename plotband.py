@@ -2,10 +2,11 @@
 #-*- coding:utf-8 -*-
 import numpy as np
 
-fname='000AsP.input' #hamiltonian file name
+#fname='000AsP.input' #hamiltonian file name
+fname='FeS10' #hamiltonian file name
 mu=9.8               #chemical potential
 mass=1.0             #effective mass
-sw_inp=0             #input hamiltonian format
+sw_inp=1             #input hamiltonian format
 """
 sw_inp: switch input hamiltonian's format
 0: .input file
@@ -14,7 +15,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=8
+option=9
 """
 option: switch calculation modes
 0: band plot
@@ -26,10 +27,11 @@ option: switch calculation modes
 6: plot 3D Fermi velocity with Fermi surface
 7: calc conductivity
 8: plot Dos
+9: calc carrier num.
 """
 
 sw_calc_mu =True
-fill=3.00
+fill=6.00
 
 alatt=np.array([1.,1.,1.]) #Bravais lattice parameter a,b,c
 #alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
@@ -38,8 +40,8 @@ k_list=[[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. p
 xlabel=['$\Gamma$','X','M','$\Gamma$'] #sym. points name
 
 olist=[1,2,3]        #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
-N=100                #kmesh btween symmetry points
-FSmesh=40           #kmesh for option in {1,2,3,5,6}
+N=80                #kmesh btween symmetry points
+FSmesh=80           #kmesh for option in {1,2,3,5,6}
 eta=5.0e-3           #eta for green function
 sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
@@ -458,6 +460,18 @@ def get_conductivity(mesh,rvec,ham_r,ndegen,mu,temp=1.0e-3):
     print(kappa)
     print(kb*kappa/(sigma*temp))
 
+def get_carrier_num(mesh,rvec,ham_r,ndegen,mu):
+    km=np.linspace(0,2*np.pi,mesh,False)
+    x,y,z=np.meshgrid(km,km,km)
+    klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
+    Nk=klist.size/3
+    ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
+    eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
+    for i,en in enumerate(eig):
+        num_hole=float(np.where(en>0)[0].size)/Nk
+        num_particle=float(np.where(en<=0)[0].size)/Nk
+        print(i+1,round(num_hole,4),round(num_particle,4))
+
 def plot_dos(mesh,rvec,ham_r,ndegen,mu,no,eta,de=200):
     km=np.linspace(0,2*np.pi,mesh,False)
     x,y,z=np.meshgrid(km,km,km)
@@ -479,7 +493,7 @@ def main():
     elif sw_inp==2:
         rvec,ndegen,ham_r,no,nr=input_ham.import_hr(fname,False)
     else: #Hopping.dat file
-        rvec,ndegen,ham_r,no,nr,axis=input_ham.import_Hopping(False,True)
+        rvec,ndegen,ham_r,no,nr,axis=input_ham.import_Hopping(fname,False,True)
 
     if sw_calc_mu:
         mu=get_mu(fill,rvec,ham_r,ndegen)
@@ -527,6 +541,8 @@ def main():
         get_conductivity(FSmesh,rvec,ham_r,ndegen,mu,temp=1.0e-3)
     elif option==8:
         plot_dos(FSmesh,rvec,ham_r,ndegen,mu,no,eta)
+    elif option==9:
+        get_carrier_num(FSmesh,rvec,ham_r,ndegen,mu)
 #--------------------------main program-------------------------------
 if __name__=="__main__":
     main()
