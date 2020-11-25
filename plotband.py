@@ -3,10 +3,10 @@
 import numpy as np
 
 #fname='000AsP.input' #hamiltonian file name
-fname='FeS10' #hamiltonian file name
+fname='Cu' #hamiltonian file name
 mu=9.8               #chemical potential
 mass=1.0             #effective mass
-sw_inp=1             #input hamiltonian format
+sw_inp=2             #input hamiltonian format
 """
 sw_inp: switch input hamiltonian's format
 0: .input file
@@ -15,7 +15,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=9
+option=7
 """
 option: switch calculation modes
 0: band plot
@@ -31,7 +31,7 @@ option: switch calculation modes
 """
 
 sw_calc_mu =True
-fill=6.00
+fill=5.50
 
 alatt=np.array([1.,1.,1.]) #Bravais lattice parameter a,b,c
 #alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
@@ -56,6 +56,13 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import input_ham
 #----------------define functions-------------------
+if sw_dec_axis:
+    pass
+else:
+    avec=alatt*Arot
+    len_avec=np.sqrt((abs(avec)**2).sum(axis=1))
+    Vuc=sclin.det(avec)
+
 def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     """
     This function generates hamiltonian from hopping parameters.
@@ -118,7 +125,7 @@ def get_vec(k,rvec,ham_r,ndegen):
     ham,expk,no,nr=get_ham(k,rvec,ham_r,ndegen,out_phase=True)
     uni=sclin.eigh(ham)[1]
     vec0=np.array([-1j*ihbar*(ham_r.reshape(no*no,nr)*(r*expk)).sum(axis=1).reshape(no,no)
-                    for r in (alatt*rvec).T])
+                    for r in (len_avec*rvec).T])
     vec=np.array([(uni.conjugate().T.dot(v0).dot(uni)).diagonal() for v0 in vec0]).T
     return vec
 
@@ -161,7 +168,7 @@ def mk_klist(k_list,N):
     xticks=[]
     for ks,ke in zip(k_list,k_list[1:]):
         dkv=np.array(ke)-np.array(ks)
-        dkv_length=np.sqrt(((dkv*alatt)**2).sum())
+        dkv_length=np.sqrt(((dkv*len_avec)**2).sum())
         tmp=2.*np.pi*np.linspace(ks,ke,N)
         tmp2=np.linspace(0,dkv_length,N)+maxsplen
         maxsplen=tmp2.max()
@@ -448,16 +455,22 @@ def get_conductivity(mesh,rvec,ham_r,ndegen,mu,temp=1.0e-3):
     km=np.linspace(0,2*np.pi,mesh,False)
     x,y,z=np.meshgrid(km,km,km)
     klist=np.array([x.ravel(),y.ravel(),z.ravel()]).T
+    Nk=len(klist)
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in klist])
     eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
     dfermi=0.25*(1.-np.tanh(0.5*eig/temp)**2)/temp
     veloc=np.array([get_vec(k,rvec,ham_r,ndegen).real for k in klist])
-    sigma=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/len(klist)
-    #l12=kb*np.array([[(vk1*vk2*eig*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/(temp*len(klist))
-    kappa=kb*np.array([[(vk1*vk2*eig**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/(temp*len(klist))
-    #print(l12/sigma)
+    sigma=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/Nk
+    l12=kb*np.array([[(vk1*vk2*eig*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/(temp*Nk))
+    kappa=kb*np.array([[(vk1*vk2*eig**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/(temp*Nk)
+    Seebeck=l12.dot(sclin.inv(sigma))
+    print('sigma matrix')
     print(sigma)
+    print('Seebeck matrix')
+    print(Seebeck)
+    print('kappa matrix')
     print(kappa)
+    print('lorenz matrix')
     print(kb*kappa/(sigma*temp))
 
 def get_carrier_num(mesh,rvec,ham_r,ndegen,mu):
