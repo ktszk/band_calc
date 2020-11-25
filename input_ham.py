@@ -33,7 +33,7 @@ def import_hr(name,sw_hoplist=True):
     while not len(tmp1)==nr:
         tmp1.extend(tmp[c2])
         c2=c2+1
-    ndegen=np.array([int(t) for t in tmp1])
+    ndegen=np.array([float(t) for t in tmp1])
     tmp1=[[float(t) for t in tp] for tp in tmp[c2:]]
     tmp=np.array([complex(tp[5],tp[6]) for tp in tmp1])
     rvec=np.array([tmp1[no*no*i][:3] for i in range(nr)])

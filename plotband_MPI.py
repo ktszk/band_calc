@@ -2,12 +2,11 @@
 #-*- coding:utf-8 -*-
 import numpy as np
 
-#fname='000AsP.input' #hamiltonian file name
-#fname='LiFeAs' #hamiltonian file name
-fname='FeS10'
+fname='000AsP.input' #hamiltonian file name
+
 mu=9.8               #chemical potential
 mass=1.0             #effective mass
-sw_inp=1             #input hamiltonian format
+sw_inp=0             #input hamiltonian format
 """
 sw_inp: switch input hamiltonian's format
 0: .input file
@@ -16,41 +15,50 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=1
+option=10
 """
 option: switch calculation modes
-0: band plot
-1: write Fermi surface at kz=0
-2: write 3D Fermi surface
-3: write Fermi velocity with Fermi surface
-4: plot spectrum like band plot
-5: plot spectrum at E=EF
-6: plot 3D Fermi velocity with Fermi surface
-7: calc conductivity
-8: plot Dos
-9: calc carrier num.
+ 0: band plot
+ 1: write Fermi surface at kz (default: kz=0)
+ 2: write 3D Fermi surface
+ 3: plot 3D Fermi velocity with Fermi surface
+ 4: write Fermi velocity with Fermi surface
+ 5: plot spectrum like band plot
+ 6: plot spectrum at E=EF
+ 7: calc conductivity
+ 8: plot Dos
+ 9: calc carrier num.
+10: calc cycrotron mass
 """
 
 sw_calc_mu =True
-fill=6.0
+fill=6.00
+temp=1.0e-6
+(emin,emax)=(-3,3)
 
-alatt=np.array([1.,1.,1.]) #Bravais lattice parameter a,b,c
-#alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
-Arot=np.array([[ .5,-.5, .5],[ .5, .5, .5],[-.5,-.5, .5]]) #rotation matrix for dec. to primitive vector
-k_list=[[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. points
-xlabel=['$\Gamma$','X','M','$\Gamma$'] #sym. points name
+alatt=np.array([3.96,3.96,13.016]) #Bravais lattice parameter a,b,c BaFe2As2
 
-olist=[1,2,3]        #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
+Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[ 0.,0., 1.]]) #rotation matrix for dec. to primitive vector
+#Arot=np.array([[ .5, -.5, .5],[ .5, .5, .5],[-.5,-.5, .5]])  #body center
+
+k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. points
+xlabel=['Z','$\Gamma$','X','M','$\Gamma$'] #sym. points name
+
+#orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
+olist=[[2,7],[1,3,6,8],[4,9]]
+
 N=200                #kmesh btween symmetry points
-FSmesh=100           #kmesh for option in {1,2,3,5,6}
+FSmesh=400           #kmesh for option in {1,2,3,5,6}
 wmesh=200
 eta=5.0e-3           #eta for green function
 sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
 kz=np.pi*0.
 with_spin=False #use only with soc hamiltonian
+de=1.e-2
 
 #----------import modules without scipy-------------
+import scipy as sc
 import scipy.linalg as sclin
 import scipy.optimize as scopt
 import scipy.constants as scconst
@@ -62,6 +70,13 @@ import input_ham
 comm=MPI.COMM_WORLD
 size=comm.Get_size()
 rank=comm.Get_rank()
+
+if sw_dec_axis:
+    pass
+else:
+    avec=alatt*Arot
+    bvec=sclin.inv(avec).T
+    Vuc=sclin.det(avec)
 
 def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     """
@@ -110,7 +125,7 @@ def gen_klist(mesh,k_sw=True,dim=None):
     k_mpi=recvbuf.reshape(count[rank]//3,3)
     return (Nk,count//3,k_mpi)
 
-def get_mu(fill,rvec,ham_r,ndegen,temp=1.0e-3,mesh=40):
+def get_mu(fill,rvec,ham_r,ndegen,temp,mesh=40):
     """
     This function calculates chemical potential.
     arguments:
@@ -141,8 +156,8 @@ def get_mu(fill,rvec,ham_r,ndegen,temp=1.0e-3,mesh=40):
     if rank==0:
         eig=recvbuf.reshape(Nk,no)
         f=lambda mu: 2.*fill*mesh**3+(np.tanh(0.5*(eig-mu)/temp)-1.).sum()
-        #mu=scopt.brentq(f,eig.min(),eig.max())
-        mu=scopt.newton(f,0.5*(eig.min()+eig.max()))
+        mu=scopt.brentq(f,eig.min(),eig.max())
+        #mu=scopt.newton(f,0.5*(eig.min()+eig.max()))
         print('chemical potential = %6.3f'%mu)
     else:
         mu=None
@@ -162,10 +177,11 @@ def get_vec(k,rvec,ham_r,ndegen):
     """
     ihbar=1./scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e-10
     #ihbar=1.
+    len_avec=np.sqrt(np.abs(avec).sum(axis=1))
     ham,expk,no,nr=get_ham(k,rvec,ham_r,ndegen,out_phase=True)
     uni=sclin.eigh(ham)[1]
     vec0=np.array([-1j*ihbar*(ham_r.reshape(no*no,nr)*(r*expk)).sum(axis=1).reshape(no,no)
-                    for r in (alatt*rvec).T])
+                    for r in (len_avec*rvec).T])
     vec=np.array([(uni.conjugate().T.dot(v0).dot(uni)).diagonal() for v0 in vec0]).T
     return vec
 
@@ -191,6 +207,11 @@ def gen_eig(ham,mass,mu,sw):
         eigtmp=np.array([sclin.eigvalsh(h) for h in ham])
         return (eigtmp.max()/mass-mu),(eigtmp.min()/mass-mu)
 
+def get_col(cl,ol):
+    col=(np.abs(cl[ol])**2 if isinstance(ol,int)
+         else (np.abs(cl[ol])**2).sum(axis=0)).round(4)
+    return col
+
 def mk_klist(k_list,N):
     """
     This function generates klist of spaghetti.
@@ -208,7 +229,7 @@ def mk_klist(k_list,N):
     xticks=[]
     for ks,ke in zip(k_list,k_list[1:]):
         dkv=np.array(ke)-np.array(ks)
-        dkv_length=np.sqrt(((dkv*alatt)**2).sum())
+        dkv_length=abs(dkv.dot(bvec)).sum()
         tmp=2.*np.pi*np.linspace(ks,ke,N)
         tmp2=np.linspace(0,dkv_length,N)+maxsplen
         maxsplen=tmp2.max()
@@ -230,18 +251,19 @@ def plot_band(eig,spl,xticks,uni,ol):
     uni: weight of orbitals
     ol: plot orbital list
     """
-    def get_col(cl,ol):
-        col=(np.abs(cl[ol])**2 if isinstance(ol,int)
-             else (np.abs(cl[ol])**2).sum(axis=0)).round(4)
-        return col
+    fig=plt.figure()
+    ax=plt.axes()
     for e,cl in zip(eig,uni):
         c1=get_col(cl,ol[0])
         c2=get_col(cl,ol[1])
         c3=get_col(cl,ol[2])
         clist=np.array([c1,c2,c3]).T
         plt.scatter(spl,e,s=5,c=clist)
+        #for i in range(len(e)):
+        #    plt.plot(spl[i:i+2],e[i:i+2],c=clist[i])
     for x in xticks[1:-1]:
         plt.axvline(x,ls='-',lw=0.25,color='black')
+    plt.ylim(emin,emax)
     plt.xlim(0,spl.max())
     plt.axhline(0.,ls='--',lw=0.25,color='black')
     plt.xticks(xticks,xlabel)
@@ -359,26 +381,17 @@ def mk_kf(mesh,sw_bnum,dim,rvec,ham_r,ndegen,mu,kz=0):
             fsband=[]
         for i,e in enumerate(eig):
             if(e.max()*e.min() < 0. ):
-                if dim==2:
-                    cont=sk.find_contours(e.reshape(mesh+1,mesh+1),0)
-                    ct0=[]
-                    for c in cont:
-                        ct0.extend(c)
-                        ct=(np.array([[c[0],c[1],+mesh/2] for c in ct0])-mesh/2)*2*np.pi/mesh
-                    ct[:,2]=kz
-                    if sw_bnum:
-                        fsband.append(i)
-                        v2.append(ct)
-                    else:
-                        v2.extend(ct)
-                elif dim==3:
-                    vertices,faces,normals,values=sk.marching_cubes_lewiner(e.reshape(mesh+1,mesh+1,mesh+1),0)
-                    if sw_bnum:
-                        fsband.append(i)
-                        v2.append((vertices-mesh/2)*2*np.pi/mesh)
-                        #v3.append(faces)
-                    else:
-                        v2.extend((2*np.pi*(vertices-mesh/2)/mesh)[faces])
+                cont=sk.find_contours(e.reshape(mesh+1,mesh+1),0)
+                ct0=[]
+                for c in cont:
+                    ct0.extend(c)
+                    ct=(np.array([[c[0],c[1],mesh/2] for c in ct0])-mesh/2)*2*np.pi/mesh
+                ct[:,2]=kz
+                if sw_bnum:
+                    fsband.append(i)
+                    v2.append(ct)
+                else:
+                    v2.extend(ct)
     else:
         v2=None
         fsband=None
@@ -387,56 +400,98 @@ def mk_kf(mesh,sw_bnum,dim,rvec,ham_r,ndegen,mu,kz=0):
     else:
         return np.array(v2)
 
-def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu):
+def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,surface_opt=0):
     """
     This function plot 3D Fermi Surface
     argument:
     mesh: k-grid mesh size
+    rvec,ham_r,ndegen: model hamiltonian
+    mu: chemical potential
+    surface_opt: switch of surface color 1:orbital weights, 2:size of velocities
     """
+    import skimage.measure as sk
     from mpl_toolkits.mplot3d import axes3d
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-    vert=mk_kf(mesh,False,3,rvec,ham_r,ndegen,mu)
+    import matplotlib.colors as colors
+    Nk,count,k_mpi=gen_klist(mesh,False,3)
+    ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
+    e_mpi=np.array([sclin.eigvalsh(h) for h in ham])/mass-mu
+    sendbuf=e_mpi.flatten()
     if rank==0:
+        no=sendbuf.size//count[rank]
+        count=count*no
+        recvbuf=np.empty(count.sum(),dtype='f8')
+        displ=np.array([count[:i].sum() for i in range(size)])
+    else:
+        recvbuf=None
+        displ=None
+    comm.Bcast(count,root=0)
+    comm.Gatherv(sendbuf,[recvbuf,count,displ,MPI.DOUBLE],root=0)
+    if rank==0:
+        if surface_opt!=0:
+            avev_all=np.zeros(3)
+            nk=0
+            v_weight=[]
+            v_verts=[]
+            vc=[]
+        clist=['r','g','b','c','m','y','k','w']
         fig=plt.figure()
-        ax=fig.add_subplot(111,projection='3d')
-        m = Poly3DCollection(vert)
-        ax.add_collection3d(m)
+        ax = fig.add_subplot(111, projection='3d')
+        eig=recvbuf.reshape(Nk,no).T
+        j=-1
+        for i,e in enumerate(eig):
+            if(e.max()*e.min() < 0. ):
+                j=j+1
+                #for old skimage version 
+                #verts,faces, _, _=sk.marching_cubes_lewiner(
+                #    e.reshape(mesh+1,mesh+1,mesh+1),0,spacing=(2*np.pi/mesh,2*np.pi/mesh,2*np.pi/mesh))
+                verts,faces, _, _=sk.marching_cubes(e.reshape(mesh+1,mesh+1,mesh+1),0,
+                                                    spacing=(2*np.pi/mesh,2*np.pi/mesh,2*np.pi/mesh))
+                surf=sk.mesh_surface_area(verts,faces)
+                verts=verts-np.pi
+                if surface_opt==0:
+                    ax.add_collection3d(Poly3DCollection(verts[faces],facecolor=clist[j%6]))
+                else:
+                    if surface_opt==2:
+                        avev=np.zeros(3)
+                    for v in verts[faces]:
+                        ave_verts=v.mean(axis=0)
+                        if surface_opt==1:
+                            htmp=get_ham(ave_verts,rvec,ham_r,ndegen)
+                            uni=sclin.eigh(htmp)[1][:,i]
+                            cl=np.array(uni)
+                            clst=[get_col(cl,ol) for ol in olist]
+                            v_weight.append(colors.rgb2hex(clst))
+                        else:
+                            vtmp=get_vec(ave_verts,rvec,ham_r,ndegen)[i].real
+                            avev=avev+np.abs(vtmp)
+                            absv=np.abs(vtmp).sum()
+                            v_weight.append(absv)
+                            vc.append(ave_verts)
+                    if(surface_opt==2):
+                        print('%.3e %.3e %.3e'%tuple(avev/len(verts[faces])))
+                        nk=nk+len(verts[faces])
+                        avev_all=avev_all+avev
+                    v_verts.extend(verts[faces])
+        if(surface_opt==1):
+            clist=np.array(v_weight)
+            tri=Poly3DCollection(v_verts,facecolors=clist,lw=0)
+            ax.add_collection3d(tri)
+        if(surface_opt==2):
+            vc=np.array(vc)
+            v_weight=np.array(v_weight)
+            clmax=v_weight.max()
+            clmin=v_weight.min()
+            clist=(v_weight-clmin)/(clmax-clmin)
+            tri=Poly3DCollection(v_verts,facecolors=cm.jet(clist),lw=0)
+            ax.add_collection3d(tri)
+            fs=ax.scatter(vc[:,0],vc[:,1],vc[:,2],c=v_weight,cmap=cm.jet,s=0.1)
+            plt.colorbar(fs,format='%.2e')
         ax.set_xlim(-np.pi, np.pi)
         ax.set_ylim(-np.pi, np.pi)
         ax.set_zlim(-np.pi, np.pi)
         plt.tight_layout()
         plt.show()
-
-def plot_veloc_FS(vfs,kfs):
-    """
-    This function plot 3D Fermi velocities
-    argument:
-    mesh: k-grid mesh size
-    """
-    from mpl_toolkits.mplot3d import axes3d
-    fig=plt.figure()
-    ax=fig.add_subplot(111,projection='3d')
-    vf,kf=[],[]
-    for v,k in zip(vfs,kfs):
-        ave_vx=np.abs(np.array(v).T[0]).mean()
-        ave_vy=np.abs(np.array(v).T[1]).mean()
-        ave_vz=np.abs(np.array(v).T[2]).mean()
-        print('%.3e %.3e %.3e'%(ave_vx,ave_vy,ave_vz))
-        vf.extend(v)
-        kf.extend(k)
-    x,y,z=zip(*np.array(kf))
-    vf=np.array(vf)
-    ave_vx=np.abs(vf.T[0]).mean()
-    ave_vy=np.abs(vf.T[1]).mean()
-    ave_vz=np.abs(vf.T[2]).mean()
-    print('%.3e %.3e %.3e'%(ave_vx,ave_vy,ave_vz))
-    absv=np.array([np.abs(v).sum() for v in vf])
-    fs=ax.scatter(x,y,z,c=absv,cmap=cm.jet)
-    ax.set_xlim(-np.pi, np.pi)
-    ax.set_ylim(-np.pi, np.pi)
-    ax.set_zlim(-np.pi, np.pi)
-    plt.colorbar(fs,format='%.2e')
-    plt.show()
 
 def plot_vec2(veloc,klist):
     v=[]
@@ -470,7 +525,7 @@ def plot_FS(uni,klist,ol,eig,X,Y,sw_color,ncut=8):
     """
     def get_col(cl,ol):
         col=(np.abs(cl[:,ol])**2 if isinstance(ol,int)
-             else (np.abs(cl[:,ol])**2).sum(axis=0)).round(4)
+             else (np.abs(cl[:,ol])**2).sum(axis=1)).round(4)
         return col
     fig=plt.figure()
     ax=fig.add_subplot(111,aspect='equal')
@@ -531,28 +586,39 @@ def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
     fig.colorbar(cont)
     plt.show()
 
-def get_conductivity(mesh,rvec,ham_r,ndegen,mu,temp=1.0e-3):
+def get_conductivity(mesh,rvec,ham_r,ndegen,mu,temp):
     """
     this function calculates conductivity at tau==1 from Boltzmann equation in metal
     """
     kb=scconst.physical_constants['Boltzmann constant in eV/K'][0] #temp=kBT[eV], so it need to convert eV>K
+    ihbar=1./scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e-10
     #kb=1.
-
+    eC=scconst.e*1.e10
     Nk,count,k_mpi=gen_klist(mesh)
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
     dfermi=0.25*(1.-np.tanh(0.5*eig/temp)**2)/temp
     veloc=np.array([get_vec(k,rvec,ham_r,ndegen).real for k in k_mpi])
-    sigma=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/Nk
-    kappa=kb*np.array([[(vk1*vk2*eig**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/(temp*Nk)
-    #l12=kb*np.array([[(vk1*vk2*eig*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])/(temp*Nk)
 
-    sigma=comm.allreduce(sigma,MPI.SUM)
-    kappa=comm.allreduce(kappa,MPI.SUM)
-    #l12=comm.allreduce(l12,MPI.SUM)
+    l11=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
+    l22=kb*np.array([[(vk1*vk2*eig**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
+    l12=kb*np.array([[(vk1*vk2*eig*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
+    l11=comm.allreduce(l11,MPI.SUM)
+    l22=comm.allreduce(l22,MPI.SUM)
+    l12=comm.allreduce(l12,MPI.SUM)
+
+    Seebeck=l12.dot(sclin.inv(l11))/temp
+    sigma=eC*l11/(Nk*Vuc)
+    kappa=eC*l22/(temp*Nk*Vuc)
+
     if rank==0:
+        print('sigma matrix')
         print(sigma)
+        print('Seebeck matrix')
+        print(Seebeck)
+        print('kappa matrix')
         print(kappa)
+        print('lorenz matrix')
         print(kb*kappa/(sigma*temp))
 
 def get_carrier_num(mesh,rvec,ham_r,ndegen,mu):
@@ -583,6 +649,170 @@ def plot_dos(mesh,rvec,ham_r,ndegen,mu,no,eta,de=200):
         plt.ylim(0,dos.max()*1.2)
         plt.show()
 
+def get_mass(mesh,rvec,ham_r,ndegen,mu,de=3.e-4,meshkz=20):
+    import skimage.measure as sk
+    if sw_dec_axis:
+        al=alatt[:2]
+    else:
+        al=alatt[:2]
+    #me=1.
+    me=scconst.m_e
+    #hbar=1.
+    hbar=scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.e10
+    #eV2J=1.
+    eV2J=scconst.physical_constants['electron volt-joule relationship'][0]
+    Nkh=mesh**2
+    ABZ=4.*np.pi**2/(al[0]*al[1])
+    def get_k(kx,ky,kz_num):
+        if rank==0:
+            kz=0.*ky+kz_num
+            klist=np.array([kx.ravel(),ky.ravel(),kz.ravel()]).T
+            Nk=len(klist)
+            sendbuf=klist.flatten()
+            cks=divmod(sendbuf.size//3,size)
+            count=np.array([3*(cks[0]+1) if i<cks[1] else 3*cks[0] for i in range(size)])
+            displ=np.array([sum(count[:i]) for i in range(size)])
+        else:
+            Nk=None
+            sendbuf=None
+            count=np.empty(size,dtype=np.int)
+            displ=None
+        Nk=comm.bcast(Nk,root=0)
+        comm.Bcast(count,root=0)
+        recvbuf=np.empty(count[rank],dtype='f8')
+        comm.Scatterv([sendbuf,count,displ,MPI.DOUBLE],recvbuf, root=0)
+        k_mpi=recvbuf.reshape(count[rank]//3,3)
+        return k_mpi,count//3,Nk
+
+    def gen_ef_point(eig,con_eig,nb):
+        efp=sk.find_contours(eig,con_eig)
+        if(nb<6):
+            return np.array(efp[0])
+        else:
+            ef_point=[]
+            ef_point.extend(efp[0])
+            ef_point.extend(efp[1])
+            ef_point.extend(efp[3])
+            ef_point.extend(efp[2])
+            return np.array(ef_point)
+
+    k0=np.linspace(-np.pi,np.pi,mesh,False)
+    kx,ky=np.meshgrid(k0,k0)
+    kz0=np.linspace(-np.pi,np.pi,meshkz,False)
+    if False:
+        Skz=[]
+        for kz_num in kz0:
+            k_mpi,count,Nk=get_k(kx,ky,kz_num)
+            ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
+            eig=np.array([sclin.eigvalsh(h) for h in ham])-mu
+            Sb=[]
+            for e in eig.T:
+                if(e.max()*e.min()<0.):
+                    num_hole=float(np.where(e>0)[0].size)
+                    num_particle=float(np.where(e<=0)[0].size)
+                else:
+                    num_hole=0.
+                    num_particle=0.
+                num_hole=comm.allreduce(num_hole,MPI.SUM)/Nkh
+                num_particle=comm.allreduce(num_particle,MPI.SUM)/Nkh
+                Sb.append(min(num_hole,num_particle)*ABZ)
+            Skz.append(np.array(Sb))
+        Skz=np.array(Skz)
+        kz_Smax=[]
+        S_max=[]
+        sband=[]
+        kz_Smin=[]
+        S_min=[]
+        sband2=[]
+        for i,sz in enumerate(Skz.T):
+            if(sz.max()==0.):
+                smax=0
+                smin=0
+            else:
+                sm=np.where(sz==sz.max())[0]
+                if rank==0:
+                    print('max',sm)
+                smax=sm[0]
+                sm=np.where(sz==sz[np.where(sz!=0)].min())[0]
+                if rank==0:
+                    print('min',sm)
+                smin=sm[0]
+            if(sz[smax]!=0.):
+                S_max.append(sz[smax])
+                kz_Smax.append(kz0[smax])
+                sband.append(i)
+            if(sz[smin]!=0.):
+                S_min.append(sz[smin])
+                kz_Smin.append(kz0[smin])
+                sband2.append(i)
+        if rank==0:
+            print(sband)
+            print(kz_Smax)
+            print(kz_Smin)
+    else:
+        sband=[4,5,6,7]
+        kz_Smax=kz0[[0,0,0,0]]
+        sband2=[4,5,6,7]
+        kz_Smin=kz0[[10,10,10,10]]
+    def obtain_mass(Skz,sband,pre_strings):
+        #if rank==0:
+        #    fig=plt.figure()
+        for kz_val,nb in zip(Skz,sband):
+            k_mpi,count,Nk=get_k(kx,ky,kz_val)
+            ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
+            e_mpi=(np.array([sclin.eigvalsh(h) for h in ham])-mu).T[nb]
+            sendbuf=e_mpi.flatten()
+            if rank==0:
+                count=count
+                recvbuf=np.empty(count.sum(),dtype='f8')
+                displ=np.array([count[:i].sum() for i in range(size)])
+            else:
+                recvbuf=None
+                displ=None
+            comm.Bcast(count,root=0)
+            comm.Gatherv(sendbuf,[recvbuf,count,displ,MPI.DOUBLE],root=0)
+            if rank==0:
+                #ax=fig.add_subplot(318+nb)
+                eig=recvbuf.reshape(mesh,mesh)
+                ef_point=gen_ef_point(eig,de,nb)
+                #plt.scatter(ef_point[:,0],ef_point[:,1],s=0.1,c='red')
+                #for k,(i,j) in enumerate(zip(ef_point,ef_point[1:])):
+                #    col=cm.jet(k/(len(ef_point)-1))
+                #    tri=plt.Polygon(((0.,0.),tuple(i),tuple(j)),facecolor=col,alpha=0.5)
+                #    ax.add_patch(tri)
+                S1=(np.array([r1[0]*r2[1]-r2[0]*r1[1] for r1,r2 in zip(ef_point,ef_point[1:])]).sum()
+                    +ef_point[-1,0]*ef_point[0,1]-ef_point[-1,1]*ef_point[0,0])*ABZ*.5/Nkh
+                ef_point=gen_ef_point(eig,-de,nb)
+                #plt.scatter(ef_point[:,0],ef_point[:,1],s=0.1,c='blue')
+                S2=(np.array([r1[0]*r2[1]-r2[0]*r1[1] for r1,r2 in zip(ef_point,ef_point[1:])]).sum()
+                    +ef_point[-1,0]*ef_point[0,1]-ef_point[-1,1]*ef_point[0,0])*ABZ*.5/Nkh
+                mc=hbar**2*abs(S1-S2)*.25/(np.pi*de*me)*eV2J
+                print(pre_strings,np.round(mc,4),nb,np.round(kz_val,4))
+        #if rank==0:
+        #    plt.show()
+
+    def obtain_mass2(Skz,sband,pre_strings):
+        for kz_val,nb in zip(Skz,sband):
+            k_mpi,count,Nk=get_k(kx,ky,kz_val)
+            ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
+            eig=(np.array([sclin.eigvalsh(h) for h in ham])-mu).T[nb]
+            num_hole=float(np.where((eig-de)>0)[0].size)/Nkh
+            num_particle=float(np.where((eig-de)<=0)[0].size)/Nkh
+            num_hole=comm.allreduce(num_hole,MPI.SUM)
+            num_particle=comm.allreduce(num_particle,MPI.SUM)
+            S1=min(num_hole,num_particle)*ABZ
+            num_hole=float(np.where((eig+de)>0)[0].size)/Nkh
+            num_particle=float(np.where((eig+de)<=0)[0].size)/Nkh
+            num_hole=comm.allreduce(num_hole,MPI.SUM)
+            num_particle=comm.allreduce(num_particle,MPI.SUM)
+            S2=min(num_hole,num_particle)*ABZ
+            mc=hbar**2*(S1-S2)/(4.*np.pi*de*me)*eV2J
+            if rank==0:
+                print(pre_strings,mc,nb)
+
+    obtain_mass(kz_Smax,sband,'m_max')
+    obtain_mass(kz_Smin,sband2,'m_min')
+
 def main():
     if rank==0:
         if sw_inp==0: #.input file
@@ -592,6 +822,7 @@ def main():
             ham_r=ham_r.flatten()
         elif sw_inp==2:
             rvec,ndegen,ham_r,no,nr=input_ham.import_hr(fname,False)
+            ham_r=ham_r.flatten()
         elif sw_inp==3: #Hopping.dat file
             rvec,ndegen,ham_r,no,nr,axis=input_ham.import_Hopping(fname,False,True)
             ham_r=ham_r.flatten()
@@ -618,9 +849,8 @@ def main():
         if rank!=0:
             axis=np.empty([3,3],dtype='f8')
         comm.Bcast(axis,root=0)
-
     if sw_calc_mu:
-        mu=get_mu(fill,rvec,ham_r,ndegen)
+        mu=get_mu(fill,rvec,ham_r,ndegen,temp)
     else:
         try:
             mu
@@ -630,6 +860,7 @@ def main():
     if sw_dec_axis:
         rvec1=np.array([Arot.T.dot(r) for r in rvec])
         rvec=rvec1
+        rvec[:,2]=rvec[:,2]*2
 
     if option in (0,1,4,5):
         if option in (0,4):
@@ -677,36 +908,38 @@ def main():
     if option==0: #band plot
         if rank==0:
             plot_band(eig,spa_length,xticks,uni,olist)
-    elif option==1: #write Fermi surface at kz=0
+    elif option==1: #write Fermi surfaces at kz
         klist1,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,mu,kz)
         if rank==0:
             ham1=np.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
             uni=np.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham1,blist)])
             plot_FS(uni,klist1,olist,eig,X,Y,sw_color)
-    elif option==2: #write 3D Fermi surface
-        gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu)
-    elif option==3: #write Fermi velocity with Fermi surface
+    elif option==2: #write 3D Fermi surfaces
+        if sw_color: #plot orbital weight on 3D Ferrmi surfaces
+            gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu,1)
+        else:
+            gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu)
+    elif option==3: #plot size of Fermi velocity on 3D Fermi surfacea
+        gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu,2)
+    elif option==4: #write Fermi velocity on 2D Fermi surfaces
         klist,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,mu,kz)
         if rank==0:
             veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
             plot_vec2(veloc,klist)
-    elif option==4: #plot spectrum like band plot
+    elif option==5: #plot spectrum like band plot
         comm.Bcast(ham,root=0)
         plot_spectrum(ham,spa_length,xticks,mu,eta,wmesh)
-    elif option==5: #plot spectrum at E=EF
+    elif option==6: #plot spectrum at E=EF
         if rank==0:
             plot_FSsp(ham,mu,X,Y,eta)
-    elif option==6: #plot 3D Fermi velocity with Fermi surface
-        klist,blist=mk_kf(FSmesh,True,3,rvec,ham_r,ndegen,mu)
-        if rank==0:
-            veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
-            plot_veloc_FS(veloc,klist)
-    elif option==7:
-        get_conductivity(FSmesh,rvec,ham_r,ndegen,mu,temp=1.0e-3)
-    elif option==8:
+    elif option==7: #plot conductivity
+        get_conductivity(FSmesh,rvec,ham_r,ndegen,mu,temp)
+    elif option==8: #plot dos
         plot_dos(FSmesh,rvec,ham_r,ndegen,mu,no,eta,wmesh)
-    elif option==9:
+    elif option==9: #plot carrier number
         get_carrier_num(FSmesh,rvec,ham_r,ndegen,mu)
+    elif option==10: 
+        get_mass(FSmesh,rvec,ham_r,ndegen,mu,de)
 #--------------------------main program-------------------------------
 if __name__=="__main__":
     main()
