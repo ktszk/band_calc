@@ -3,9 +3,6 @@
 import numpy as np
 
 fname='000AsP.input' #hamiltonian file name
-
-mu=9.8               #chemical potential
-mass=1.0             #effective mass
 sw_inp=0             #input hamiltonian format
 """
 sw_inp: switch input hamiltonian's format
@@ -15,7 +12,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=10
+option=0
 """
 option: switch calculation modes
  0: band plot
@@ -31,31 +28,31 @@ option: switch calculation modes
 10: calc cycrotron mass
 """
 
-sw_calc_mu =True
-fill=6.00
-temp=1.0e-6
+N=200                #kmesh btween symmetry points
+FSmesh=40           #kmesh for option in {1,2,3,5,6}
+wmesh=200
 (emin,emax)=(-3,3)
+eta=1.0e-3           #eta for green function
+de=1.e-4
+kz=np.pi*0.          #kz for option 1,4 and 6
+sw_dec_axis=False    #transform Cartesian axis
+sw_color=True        #plot band or FS with orbital weight
+with_spin=False      #use only with soc hamiltonian
+mass=1.0             #effective mass (reduce band width by hand)
 
-alatt=np.array([3.96,3.96,13.016]) #Bravais lattice parameter a,b,c BaFe2As2
+sw_calc_mu =True
+fill=6.00            #band filling
+temp=1.0e-9          #temperature
+mu=9.8               #chemical potential
 
-Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[ 0.,0., 1.]]) #rotation matrix for dec. to primitive vector
-#Arot=np.array([[ .5, -.5, .5],[ .5, .5, .5],[-.5,-.5, .5]])  #body center
+alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
+Arot=np.array([[ .5, -.5, .5],[ .5, .5, .5],[-.5,-.5, .5]]) #rotation matrix for dec. to primitive vector
+#Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[ 0.,0., 1.]]) #rotation matrix for dec. to primitive vector
 
 k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. points
 xlabel=['Z','$\Gamma$','X','M','$\Gamma$'] #sym. points name
-
 #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
 olist=[[2,7],[1,3,6,8],[4,9]]
-
-N=200                #kmesh btween symmetry points
-FSmesh=400           #kmesh for option in {1,2,3,5,6}
-wmesh=200
-eta=5.0e-3           #eta for green function
-sw_dec_axis=False    #transform Cartesian axis
-sw_color=True        #plot band or FS with orbital weight
-kz=np.pi*0.
-with_spin=False #use only with soc hamiltonian
-de=1.e-2
 
 #----------import modules without scipy-------------
 import scipy as sc
@@ -634,7 +631,7 @@ def get_carrier_num(mesh,rvec,ham_r,ndegen,mu):
         if(rank==0):
             print(i+1,round(num_hole,4),round(num_particle,4))
 
-def plot_dos(mesh,rvec,ham_r,ndegen,mu,no,eta,de=200):
+def plot_dos(mesh,rvec,ham_r,ndegen,mu,no,eta,de=1000):
     Nk,count,k_mpi=gen_klist(mesh)
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     eig=np.array([sclin.eigvalsh(h) for h in ham])-mu
@@ -642,11 +639,22 @@ def plot_dos(mesh,rvec,ham_r,ndegen,mu,no,eta,de=200):
     emax=comm.allreduce(eig.max(),MPI.MAX)
     emin=comm.allreduce(eig.min(),MPI.MIN)
     w=np.linspace(emin*1.1,emax*1.1,de)
-    dos=eta*np.array([(eta/((ww-eig)**2+eta**2)).sum() for ww in w])/Nk
+    dos=np.array([(eta/((ww-eig)**2+eta**2)).sum() for ww in w])/(np.pi*Nk)
+    dosef=(eta/(eig**2+eta**2)).sum()/(np.pi*Nk)
     dos=comm.allreduce(dos,MPI.SUM)
+    dosef=comm.allreduce(dosef,MPI.SUM)
     if rank==0:
-        plt.plot(w,dos)
-        plt.ylim(0,dos.max()*1.2)
+        kb=scconst.physical_constants['Boltzmann constant in eV/K'][0]
+        eV2J=scconst.physical_constants['electron volt-joule relationship'][0]
+        mol=6.02e23
+        gamma=dosef*eV2J*mol*(np.pi*kb)**2/3
+        fermi=.5*(1.-np.tanh(.5*w/temp))
+        dw=w[1]-w[0]
+        print('gamma = %8.2e mJ/(MolK^2)'%(gamma*1e3))
+        print(dw*(dos*fermi).sum())
+        print(dosef/13.606)
+        plt.plot(w,dos*2)
+        plt.ylim(0,dos.max()*1.2*2)
         plt.show()
 
 def get_mass(mesh,rvec,ham_r,ndegen,mu,de=3.e-4,meshkz=20):
@@ -655,6 +663,8 @@ def get_mass(mesh,rvec,ham_r,ndegen,mu,de=3.e-4,meshkz=20):
         al=alatt[:2]
     else:
         al=alatt[:2]
+        #al[0]=np.sqrt(alatt[0]**2+alatt[1]**2)*0.5
+        #al[1]=al[0]
     #me=1.
     me=scconst.m_e
     #hbar=1.
@@ -686,15 +696,39 @@ def get_mass(mesh,rvec,ham_r,ndegen,mu,de=3.e-4,meshkz=20):
 
     def gen_ef_point(eig,con_eig,nb):
         efp=sk.find_contours(eig,con_eig)
-        if(nb<6):
-            return np.array(efp[0])
-        else:
+        #print(efp)
+        if(len(efp)==1):
+            return np.array([efp[0]])
+        elif(len(efp)==4):
+            if(efp[0][0,0]==0. or efp[0][0,1]==0.):
+                ef_point=[]
+                ef_point.extend(efp[0])
+                ef_point.extend(efp[1])
+                if(efp[1][-1,1]==efp[3][0,1]):
+                    ef_point.extend(efp[3])
+                    ef_point.extend(efp[2])
+                elif(efp[1][-1,1]==efp[2][0,1]):
+                    ef_point.extend(efp[2])
+                    ef_point.extend(efp[3])
+                return np.array([ef_point])
+            else:
+                return(np.array(efp))
+        elif(len(efp)==7):
             ef_point=[]
             ef_point.extend(efp[0])
             ef_point.extend(efp[1])
-            ef_point.extend(efp[3])
-            ef_point.extend(efp[2])
-            return np.array(ef_point)
+            ef_point.extend(efp[6])
+            ef_point.extend(efp[5])
+            return(np.array([np.array(ef_point),efp[2],efp[3],efp[4]]))
+        elif(len(efp)==8):
+            ef_point=[]
+            ef_point.extend(efp[0])
+            ef_point.extend(efp[1])
+            ef_point.extend(efp[7])
+            ef_point.extend(efp[6])
+            return(np.array([np.array(ef_point),efp[2],efp[3],efp[4],efp[5]]))
+        else:
+            return(np.array(efp))
 
     k0=np.linspace(-np.pi,np.pi,mesh,False)
     kx,ky=np.meshgrid(k0,k0)
@@ -747,13 +781,38 @@ def get_mass(mesh,rvec,ham_r,ndegen,mu,de=3.e-4,meshkz=20):
                 sband2.append(i)
         if rank==0:
             print(sband)
+            print(sband2)
             print(kz_Smax)
             print(kz_Smin)
     else:
-        sband=[4,5,6,7]
-        kz_Smax=kz0[[0,0,0,0]]
-        sband2=[4,5,6,7]
-        kz_Smin=kz0[[10,10,10,10]]
+        sband=[]
+        sband2=[]
+        k_mpi,count,Nk=get_k(kx,ky,kz0[0])
+        ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
+        eig=np.array([sclin.eigvalsh(h) for h in ham])-mu
+        cksf=0
+        for i,e in enumerate(eig.T):
+            if(e.max()*e.min()<0.):
+                ckfs=1
+            else:
+                ckfs=0
+            ckfs=comm.allreduce(ckfs,MPI.SUM)
+            if ckfs!=0:
+                sband.append(i)
+        kz_Smax=kz0[[0]*len(sband)]
+
+        k_mpi,count,Nk=get_k(kx,ky,kz0[10])
+        ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
+        eig=np.array([sclin.eigvalsh(h) for h in ham])-mu
+        for i,e in enumerate(eig.T):
+            if(e.max()*e.min()<0.):
+                ckfs=1
+            else:
+                ckfs=0
+            ckfs=comm.allreduce(ckfs,MPI.SUM)
+            if ckfs!=0:
+                sband2.append(i)
+        kz_Smin=kz0[[10]*len(sband2)]
     def obtain_mass(Skz,sband,pre_strings):
         #if rank==0:
         #    fig=plt.figure()
@@ -772,22 +831,32 @@ def get_mass(mesh,rvec,ham_r,ndegen,mu,de=3.e-4,meshkz=20):
             comm.Bcast(count,root=0)
             comm.Gatherv(sendbuf,[recvbuf,count,displ,MPI.DOUBLE],root=0)
             if rank==0:
-                #ax=fig.add_subplot(318+nb)
+                #ax=fig.add_subplot(229+nb) #10orb
+                #ax=fig.add_subplot(223+nb) #Ba
+                #ax=fig.add_subplot(219+nb)
                 eig=recvbuf.reshape(mesh,mesh)
-                ef_point=gen_ef_point(eig,de,nb)
-                #plt.scatter(ef_point[:,0],ef_point[:,1],s=0.1,c='red')
-                #for k,(i,j) in enumerate(zip(ef_point,ef_point[1:])):
-                #    col=cm.jet(k/(len(ef_point)-1))
-                #    tri=plt.Polygon(((0.,0.),tuple(i),tuple(j)),facecolor=col,alpha=0.5)
-                #    ax.add_patch(tri)
-                S1=(np.array([r1[0]*r2[1]-r2[0]*r1[1] for r1,r2 in zip(ef_point,ef_point[1:])]).sum()
-                    +ef_point[-1,0]*ef_point[0,1]-ef_point[-1,1]*ef_point[0,0])*ABZ*.5/Nkh
-                ef_point=gen_ef_point(eig,-de,nb)
-                #plt.scatter(ef_point[:,0],ef_point[:,1],s=0.1,c='blue')
-                S2=(np.array([r1[0]*r2[1]-r2[0]*r1[1] for r1,r2 in zip(ef_point,ef_point[1:])]).sum()
-                    +ef_point[-1,0]*ef_point[0,1]-ef_point[-1,1]*ef_point[0,0])*ABZ*.5/Nkh
-                mc=hbar**2*abs(S1-S2)*.25/(np.pi*de*me)*eV2J
-                print(pre_strings,np.round(mc,4),nb,np.round(kz_val,4))
+                efp=gen_ef_point(eig,de,nb)
+                #print(efp)
+                S1=[]
+                for i,ef_point in enumerate(efp):
+                    #if(i==0):
+                    #    plt.scatter(ef_point[:,0],ef_point[:,1],s=0.1,c='red')
+                    #    for k,(i,j) in enumerate(zip(ef_point,ef_point[1:])):
+                    #        col=cm.jet(k/(len(ef_point)-1))
+                    #        tri=plt.Polygon(((0.,0.),tuple(i),tuple(j)),facecolor=col,alpha=0.5)
+                    #        ax.add_patch(tri)
+                    S1.append((np.array([r1[0]*r2[1]-r2[0]*r1[1] for r1,r2 in zip(ef_point[:],ef_point[1:])]).sum()
+                        +ef_point[-1,0]*ef_point[0,1]-ef_point[-1,1]*ef_point[0,0])*ABZ*.5/Nkh)
+                efp=gen_ef_point(eig,-de,nb)
+                #print(efp)
+                S2=[]
+                for ef_point in efp:
+                    #plt.scatter(ef_point[:,0],ef_point[:,1],s=0.1,c='blue')
+                    S2.append((np.array([r1[0]*r2[1]-r2[0]*r1[1] for r1,r2 in zip(ef_point,ef_point[1:])]).sum()
+                        +ef_point[-1,0]*ef_point[0,1]-ef_point[-1,1]*ef_point[0,0])*ABZ*.5/Nkh)
+                mc=hbar**2*abs(np.array(S1)-np.array(S2))*.25/(np.pi*de*me)*eV2J
+                for mcc in mc:
+                    print(pre_strings,np.round(mcc,4),nb,np.round(kz_val,4))
         #if rank==0:
         #    plt.show()
 
