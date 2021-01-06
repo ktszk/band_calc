@@ -34,26 +34,43 @@ wmesh=200
 (emin,emax)=(-3,3)
 eta=1.0e-3           #eta for green function
 de=1.e-4
-kz=np.pi*0.          #kz for option 1,4 and 6
+kz=np.pi*0.
 sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
-with_spin=False      #use only with soc hamiltonian
-mass=1.0             #effective mass (reduce band width by hand)
+with_spin=False #use only with soc hamiltonian
+mass=1.0             #effective mass
 
 sw_calc_mu =True
-fill=6.00            #band filling
-temp=1.0e-9          #temperature
+fill=3.00
+brav=0 #0:sc, 1,2: bc, 3: orthorhombic, 4: monoclinic
+temp=1.0e-9
 mu=9.8               #chemical potential
 
 alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
-Arot=np.array([[ .5, -.5, .5],[ .5, .5, .5],[-.5,-.5, .5]]) #rotation matrix for dec. to primitive vector
-#Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[ 0.,0., 1.]]) #rotation matrix for dec. to primitive vector
-
-k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. points
-xlabel=['Z','$\Gamma$','X','M','$\Gamma$'] #sym. points name
 #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
-olist=[[2,7],[1,3,6,8],[4,9]]
+olist=[0,[1,2],3]
 
+if brav==0:
+    Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[ 0.,0., 1.]]) #rotation matrix for dec. to primitive vector
+    k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. points 2
+    xlabel=['Z','$\Gamma$','X','Z','$\Gamma$'] #sym. points name  1
+    #k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,.5,.0],[0.,0.,0.],[.5,.5,0.]] #3 
+    #xlabel=['Z','$\Gamma$','X','M','Y','$\Gamma$','M'] #sym. points name 3
+elif brav in {1,2}:
+    #rotation matrix for dec. to primitive vector bc1 ba k brav==1, cs brav==2
+    Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[-.5,-.5, .5]] if brav==1 else
+                  [[ .5, -.5, .5],[ .5, .5, .5],[-.5,-.5, .5]])
+    k_list=([[0.,0.,.5],[0., 0., 0.],[.5, .5, -.5],[1.,0.,-.5],[0.,0.,0.]] if brav==1 else
+            [[.5,.5,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5,-.5],[0.,0.,0.]])
+    xlabel=['Z','$\Gamma$','X','M','$\Gamma$'] #sym. points name 2 
+elif brav==3:
+    Arot=np.array([[ .5, .5, 0.],[-.5, .5, 0.],[ 0.,0., 1.]])
+    k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,.5,0.],[0.,0.,0.]]  #4 
+    xlabel=['Z','$\Gamma$','X','M','Y','$\Gamma$'] #4
+elif brav==4:
+    Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[-0.06457,0., 0.99979]]) #rotation matrix for dec. to primitive vector
+    k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. points 2
+    xlabel=['Z','$\Gamma$','X','Z','$\Gamma$'] #sym. points name  1
 #----------import modules without scipy-------------
 import scipy as sc
 import scipy.linalg as sclin
@@ -74,7 +91,6 @@ else:
     avec=alatt*Arot
     bvec=sclin.inv(avec).T
     Vuc=sclin.det(avec)
-
 def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     """
     This function generates hamiltonian from hopping parameters.
@@ -484,10 +500,104 @@ def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,surface_opt=0):
             ax.add_collection3d(tri)
             fs=ax.scatter(vc[:,0],vc[:,1],vc[:,2],c=v_weight,cmap=cm.jet,s=0.1)
             plt.colorbar(fs,format='%.2e')
+        ax.grid(False)
         ax.set_xlim(-np.pi, np.pi)
         ax.set_ylim(-np.pi, np.pi)
         ax.set_zlim(-np.pi, np.pi)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_zticks([])
         plt.tight_layout()
+
+        if brav==0:
+            ax.plot([-np.pi,np.pi],[np.pi,np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-np.pi,np.pi],[np.pi,np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-np.pi,np.pi],[-np.pi,-np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-np.pi,np.pi],[-np.pi,-np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
+
+            ax.plot([np.pi,np.pi],[-np.pi,np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([np.pi,np.pi],[-np.pi,np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-np.pi,-np.pi],[-np.pi,np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-np.pi,-np.pi],[-np.pi,np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
+
+            ax.plot([np.pi,np.pi],[np.pi,np.pi],[-np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([np.pi,np.pi],[-np.pi,-np.pi],[-np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-np.pi,-np.pi],[np.pi,np.pi],[-np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-np.pi,-np.pi],[-np.pi,-np.pi],[-np.pi,np.pi],ls='-',lw=1.,color='black')
+        elif brav==4:
+            da=0.0088435
+            dc=0.12914
+            ax.plot([(1.-da)*np.pi,(1.-da)*np.pi],[-np.pi,np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.-da)*np.pi,-(1.-da)*np.pi],[-np.pi,np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
+            ax.plot([(1-da)*np.pi,(1.-da)*np.pi],[-np.pi,np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.-da)*np.pi,-(1.-da)*np.pi],[-np.pi,np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
+
+            ax.plot([-(1.-da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.-da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.-da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.-da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
+
+            ax.plot([(1.+da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[-(1.-dc)*np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([(1.+da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[-(1.-dc)*np.pi,-np.pi],ls='-',lw=1.,color='black')
+            ax.plot([(1.+da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[-(1.-dc)*np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([(1.+da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[-(1.-dc)*np.pi,-np.pi],ls='-',lw=1.,color='black')
+            ax.plot([(1.+da)*np.pi,(1.+da)*np.pi],[-np.pi,np.pi],[-(1.-dc)*np.pi,-(1.-dc)*np.pi],ls='-',lw=1.,color='black')
+
+            ax.plot([-(1.+da)*np.pi,-(1.-da)*np.pi],[np.pi,np.pi],[(1.-dc)*np.pi,-np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.+da)*np.pi,-(1.-da)*np.pi],[np.pi,np.pi],[(1.-dc)*np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.+da)*np.pi,-(1.-da)*np.pi],[-np.pi,-np.pi],[(1.-dc)*np.pi,-np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.+da)*np.pi,-(1.-da)*np.pi],[-np.pi,-np.pi],[(1.-dc)*np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.+da)*np.pi,-(1.+da)*np.pi],[-np.pi,np.pi],[(1.-dc)*np.pi,(1.-dc)*np.pi],ls='-',lw=1.,color='black')
+        elif brav in {1,2}:
+            cpa=alatt[2]/alatt[0]
+            icpa=1./cpa
+            ep=icpa**2
+            #top plain
+            ax.plot([-(1.-ep)*np.pi,(1.-ep)*np.pi],[(1-ep)*np.pi,(1-ep)*np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,-(1.-ep)*np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.-ep)*np.pi,-(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
+            #bottom plain
+            ax.plot([-(1.-ep)*np.pi,(1.-ep)*np.pi],[(1-ep)*np.pi,(1-ep)*np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,-(1.-ep)*np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
+            ax.plot([(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.-ep)*np.pi,-(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
+
+            ax.plot([(1.-ep)*np.pi,np.pi],[(1.-ep)*np.pi,np.pi],[np.pi,.5*np.pi],ls='-',lw=1.,color='black')
+            ax.plot([(1.-ep)*np.pi,np.pi],[-(1.-ep)*np.pi,-np.pi],[np.pi,.5*np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.-ep)*np.pi,-np.pi],[(1.-ep)*np.pi,np.pi],[np.pi,.5*np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.-ep)*np.pi,-np.pi],[-(1.-ep)*np.pi,-np.pi],[np.pi,.5*np.pi],ls='-',lw=1.,color='black')
+
+            ax.plot([(1.-ep)*np.pi,np.pi],[(1.-ep)*np.pi,np.pi],[-np.pi,-.5*np.pi],ls='-',lw=1.,color='black')
+            ax.plot([(1.-ep)*np.pi,np.pi],[-(1.-ep)*np.pi,-np.pi],[-np.pi,-.5*np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.-ep)*np.pi,-np.pi],[(1.-ep)*np.pi,np.pi],[-np.pi,-.5*np.pi],ls='-',lw=1.,color='black')
+            ax.plot([-(1.-ep)*np.pi,-np.pi],[-(1.-ep)*np.pi,-np.pi],[-np.pi,-.5*np.pi],ls='-',lw=1.,color='black')
+
+            ax.plot([np.pi,(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[.5*np.pi,0.],ls='-',lw=1.,color='black')
+            ax.plot([np.pi,(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[.5*np.pi,0.],ls='-',lw=1.,color='black')
+            ax.plot([np.pi,(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[-.5*np.pi,0.],ls='-',lw=1.,color='black')
+            ax.plot([np.pi,(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[-.5*np.pi,0.],ls='-',lw=1.,color='black')
+
+            ax.plot([np.pi,(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[.5*np.pi,0.],ls='-',lw=1.,color='black')
+            ax.plot([np.pi,(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[.5*np.pi,0.],ls='-',lw=1.,color='black')
+            ax.plot([np.pi,(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[-.5*np.pi,0.],ls='-',lw=1.,color='black')
+            ax.plot([np.pi,(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[-.5*np.pi,0.],ls='-',lw=1.,color='black')
+
+            ax.plot([-np.pi,-(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[.5*np.pi,0.],ls='-',lw=1.,color='black')
+            ax.plot([-np.pi,-(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[.5*np.pi,0.],ls='-',lw=1.,color='black')
+            ax.plot([-np.pi,-(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[-.5*np.pi,0.],ls='-',lw=1.,color='black')
+            ax.plot([-np.pi,-(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[-.5*np.pi,0.],ls='-',lw=1.,color='black')
+
+            ax.plot([-np.pi,-(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[.5*np.pi,0.],ls='-',lw=1.,color='black')
+            ax.plot([-np.pi,-(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[.5*np.pi,0.],ls='-',lw=1.,color='black')
+            ax.plot([-np.pi,-(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[-.5*np.pi,0.],ls='-',lw=1.,color='black')
+            ax.plot([-np.pi,-(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[-.5*np.pi,0.],ls='-',lw=1.,color='black')
+
+            ax.plot([(1.-ep)*np.pi,-(1.-ep)*np.pi],[(1.+ep)*np.pi,(1.+ep)*np.pi],[0.,0.],ls='-',lw=1.,color='black')
+            ax.plot([(1.+ep)*np.pi,(1.+ep)*np.pi],[(1.-ep)*np.pi,-(1.-ep)*np.pi],[0.,0.],ls='-',lw=1.,color='black')
+            ax.plot([(1.-ep)*np.pi,-(1.-ep)*np.pi],[-(1.+ep)*np.pi,-(1.+ep)*np.pi],[0.,0.],ls='-',lw=1.,color='black')
+            ax.plot([-(1.+ep)*np.pi,-(1.+ep)*np.pi],[(1.-ep)*np.pi,-(1.-ep)*np.pi],[0.,0.],ls='-',lw=1.,color='black')
+
         plt.show()
 
 def plot_vec2(veloc,klist):
@@ -832,8 +942,6 @@ def get_mass(mesh,rvec,ham_r,ndegen,mu,de=3.e-4,meshkz=20):
             comm.Gatherv(sendbuf,[recvbuf,count,displ,MPI.DOUBLE],root=0)
             if rank==0:
                 #ax=fig.add_subplot(229+nb) #10orb
-                #ax=fig.add_subplot(223+nb) #Ba
-                #ax=fig.add_subplot(219+nb)
                 eig=recvbuf.reshape(mesh,mesh)
                 efp=gen_ef_point(eig,de,nb)
                 #print(efp)
@@ -929,7 +1037,8 @@ def main():
     if sw_dec_axis:
         rvec1=np.array([Arot.T.dot(r) for r in rvec])
         rvec=rvec1
-        rvec[:,2]=rvec[:,2]*2
+        if brav in {1,2}:
+            rvec[:,2]=rvec[:,2]*2.
 
     if option in (0,1,4,5):
         if option in (0,4):
