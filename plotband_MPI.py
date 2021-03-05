@@ -2,8 +2,8 @@
 #-*- coding:utf-8 -*-
 import numpy as np
 
-fname='000AsP.input' #hamiltonian file name
-sw_inp=0             #input hamiltonian format
+fname='Cu' #hamiltonian file name
+sw_inp=2             #input hamiltonian format
 """
 sw_inp: switch input hamiltonian's format
 0: .input file
@@ -12,7 +12,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=0
+option=4
 """
 option: switch calculation modes
  0: band plot
@@ -31,7 +31,7 @@ option: switch calculation modes
 N=200                #kmesh btween symmetry points
 FSmesh=40           #kmesh for option in {1,2,3,5,6}
 wmesh=200
-(emin,emax)=(-3,3)
+(emin,emax)=(-10,10)
 eta=1.0e-3           #eta for green function
 de=1.e-4
 kz=np.pi*0.
@@ -39,14 +39,17 @@ sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
 with_spin=False #use only with soc hamiltonian
 mass=1.0             #effective mass
+sw_unit=True
 
 sw_calc_mu =True
-fill=3.00
-brav=0 #0:sc, 1,2: bc, 3: orthorhombic, 4: monoclinic
-temp=1.0e-9
-mu=9.8               #chemical potential
+fill=5.50
+brav=5 #0:sc, 1,2: bc, 3: orthorhombic, 4: monoclinic
+#temp=1.0e-9
+temp=0.91e-2
+mu=12.494              #chemical potential
 
-alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
+alatt=np.array([6.83,6.83,6.83])
+#alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
 #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
 olist=[0,[1,2],3]
 
@@ -71,6 +74,10 @@ elif brav==4:
     Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[-0.06457,0., 0.99979]]) #rotation matrix for dec. to primitive vector
     k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. points 2
     xlabel=['Z','$\Gamma$','X','Z','$\Gamma$'] #sym. points name  1
+elif brav==5:
+    Arot=np.array([[-.5,0.,.5],[0.,.5,.5],[-.5,.5,0.]])
+    k_list=[[0.,0.,0.],[.5, 0., .5],[1., 0., 0.],[.5, .5, .5],[.5,.25,.75],[0.,0.,0.]] #coordinate of sym. points
+    xlabel=['$\Gamma$','X','$\Gamma$','L','W','$\Gamma$'] #sym. points name
 #----------import modules without scipy-------------
 import scipy as sc
 import scipy.linalg as sclin
@@ -85,12 +92,6 @@ comm=MPI.COMM_WORLD
 size=comm.Get_size()
 rank=comm.Get_rank()
 
-if sw_dec_axis:
-    pass
-else:
-    avec=alatt*Arot
-    bvec=sclin.inv(avec).T
-    Vuc=sclin.det(avec)
 def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     """
     This function generates hamiltonian from hopping parameters.
@@ -129,7 +130,7 @@ def gen_klist(mesh,k_sw=True,dim=None):
     else:
         Nk=None
         sendbuf=None
-        count=np.empty(size,dtype=np.int)
+        count=np.empty(size,dtype='i8')
         displ=None
     comm.Bcast(count,root=0)
     Nk=comm.bcast(Nk,root=0)
@@ -177,7 +178,7 @@ def get_mu(fill,rvec,ham_r,ndegen,temp,mesh=40):
     mu=comm.bcast(mu,root=0)
     return mu
 
-def get_vec(k,rvec,ham_r,ndegen):
+def get_vec(k,rvec,ham_r,ndegen,avec):
     """
     This function generates velocities from hopping parameters.
     arguments:
@@ -188,8 +189,10 @@ def get_vec(k,rvec,ham_r,ndegen):
     return values:
     vec: velocity in k for each bands
     """
-    ihbar=1./scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e-10
-    #ihbar=1.
+    if sw_unit:
+        ihbar=1./scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e-10
+    else:
+        ihbar=1.
     len_avec=np.sqrt(np.abs(avec).sum(axis=1))
     ham,expk,no,nr=get_ham(k,rvec,ham_r,ndegen,out_phase=True)
     uni=sclin.eigh(ham)[1]
@@ -271,9 +274,9 @@ def plot_band(eig,spl,xticks,uni,ol):
         c2=get_col(cl,ol[1])
         c3=get_col(cl,ol[2])
         clist=np.array([c1,c2,c3]).T
-        plt.scatter(spl,e,s=5,c=clist)
-        #for i in range(len(e)):
-        #    plt.plot(spl[i:i+2],e[i:i+2],c=clist[i])
+        #plt.scatter(spl,e,s=5,c=clist)
+        for i in range(len(e)):
+            plt.plot(spl[i:i+2],e[i:i+2],c=clist[i])
     for x in xticks[1:-1]:
         plt.axvline(x,ls='-',lw=0.25,color='black')
     plt.ylim(emin,emax)
@@ -302,7 +305,7 @@ def plot_spectrum(ham,klen,xticks,mu,eta0=5.e-2,de=100,smesh=200):
         displ=np.array([sum(count[:i]) for i in range(size)])
     else:
         sendbuf=None
-        count=np.empty(size,dtype=np.int)
+        count=np.empty(size,dtype='i8')
         displ=None
     comm.Bcast(count,root=0)
     recvbuf=np.empty(count[rank],dtype='f8')
@@ -359,7 +362,7 @@ def make_kmesh(mesh,dim,kz=0,sw=False):
     else:
         return(klist)
 
-def mk_kf(mesh,sw_bnum,dim,rvec,ham_r,ndegen,mu,kz=0):
+def mk_kf(mesh,rvec,ham_r,ndegen,mu,kz=0):
     """
     This function generates k-list on Fermi surfaces
     arguments:
@@ -373,7 +376,7 @@ def mk_kf(mesh,sw_bnum,dim,rvec,ham_r,ndegen,mu,kz=0):
     """
     import skimage.measure as sk
     from mpl_toolkits.mplot3d import axes3d
-    Nk,count,k_mpi=gen_klist(mesh,False,dim)
+    Nk,count,k_mpi=gen_klist(mesh,False,2)
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     e_mpi=np.array([sclin.eigvalsh(h) for h in ham])/mass-mu
     sendbuf=e_mpi.flatten()
@@ -390,28 +393,17 @@ def mk_kf(mesh,sw_bnum,dim,rvec,ham_r,ndegen,mu,kz=0):
     if rank==0:
         eig=recvbuf.reshape(Nk,no).T
         v2=[]
-        if sw_bnum:
-            fsband=[]
+        fsband=[]
         for i,e in enumerate(eig):
             if(e.max()*e.min() < 0. ):
                 cont=sk.find_contours(e.reshape(mesh+1,mesh+1),0)
-                ct0=[]
-                for c in cont:
-                    ct0.extend(c)
-                    ct=(np.array([[c[0],c[1],mesh/2] for c in ct0])-mesh/2)*2*np.pi/mesh
-                ct[:,2]=kz
-                if sw_bnum:
-                    fsband.append(i)
-                    v2.append(ct)
-                else:
-                    v2.extend(ct)
+                ct=[[np.array(list(c)+[kz]) for c in (cc-mesh/2)*2*np.pi/mesh] for cc in cont]
+                fsband.append(i)
+                v2.append(ct)
     else:
         v2=None
         fsband=None
-    if sw_bnum:
-        return v2,fsband
-    else:
-        return np.array(v2)
+    return v2,fsband
 
 def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,surface_opt=0):
     """
@@ -476,7 +468,7 @@ def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,surface_opt=0):
                             clst=[get_col(cl,ol) for ol in olist]
                             v_weight.append(colors.rgb2hex(clst))
                         else:
-                            vtmp=get_vec(ave_verts,rvec,ham_r,ndegen)[i].real
+                            vtmp=get_vec(ave_verts,rvec,ham_r,ndegen,avec)[i].real
                             avev=avev+np.abs(vtmp)
                             absv=np.abs(vtmp).sum()
                             v_weight.append(absv)
@@ -603,12 +595,22 @@ def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,surface_opt=0):
 def plot_vec2(veloc,klist):
     v=[]
     k=[]
-    for vv,kk in zip(veloc,klist):
-        v0=np.array([np.sqrt((np.abs(v0)**2).sum()) for v0 in vv])
-        v.extend(v0)
-        k.extend(kk)
+    for vl,kl in zip(veloc,klist):
+        for vv,kk in zip(vl,kl):
+            v0=np.array([np.sqrt((np.abs(v0)**2).sum()) for v0 in vv])
+            #for vc,k1,k2 in zip(v0,kk,kk[1:]):
+            #    plt.plot([k1[0],k2[0]],[k1[1],k2[1]],c=vc)
+            v.extend(v0)
+            k.extend(kk)
     v=np.array(v)
     k=np.array(k)
+    vmax=v.max()
+    vmin=v.min()
+    for vl,kl in zip(veloc,klist):
+        for vv,kk in zip(vl,kl):
+            v0=(np.array([np.sqrt((np.abs(v0)**2).sum()) for v0 in vv])-vmin)/(vmax-vmin)
+            for vc1,vc2,k1,k2 in zip(v0,v0[1:],kk,kk[1:]):
+                plt.plot([k1[0],k2[0]],[k1[1],k2[1]],c=cm.jet((vc1+vc2)*.5))
     plt.scatter(k[:,0],k[:,1],s=1.0,c=v)
     plt.jet()
     plt.xlim(-np.pi,np.pi)
@@ -618,7 +620,7 @@ def plot_vec2(veloc,klist):
     plt.colorbar(format='%.2e')
     plt.show()
 
-def plot_FS(uni,klist,ol,eig,X,Y,sw_color,ncut=8):
+def plot_FS(uni,klist,ol,ncut=8):
     """
     This function plot 2D Fermi Surface with/without orbital weight
     argument:
@@ -636,9 +638,9 @@ def plot_FS(uni,klist,ol,eig,X,Y,sw_color,ncut=8):
         return col
     fig=plt.figure()
     ax=fig.add_subplot(111,aspect='equal')
-    if sw_color:
-        col=['r','g','b','c','m','y','k','w']
-        for kk,cl,cb in zip(klist,uni,col):
+    col=['r','g','b','c','m','y','k','w']
+    for kl,ul,cb in zip(klist,uni,col):
+        for kk,cl,in zip(kl,ul):
             cl=np.array(cl)
             c1=get_col(cl,ol[0])
             c2=get_col(cl,ol[1])
@@ -656,11 +658,21 @@ def plot_FS(uni,klist,ol,eig,X,Y,sw_color,ncut=8):
                 k1=kk[::ncut,0]
                 k2=kk[::ncut,1]
                 plt.quiver(k1,k2,v1,v2,color=cb,angles='xy',scale_units='xy',scale=3.0)
-            plt.scatter(kk[:,0],kk[:,1],s=2.0,c=clist)
-    else:
-        for en in eig:
-            if(en.max()*en.min()<0.0):
-                plt.contour(X,Y,en.reshape(FSmesh,FSmesh),levels=[0.],color='black')
+            for k1,k2,clst in zip(kk,kk[1:],clist):
+                plt.plot([k1[0],k2[0]],[k1[1],k2[1]],c=clst)
+    plt.xlim(-np.pi,np.pi)
+    plt.ylim(-np.pi,np.pi)
+    plt.xticks([-np.pi,0,np.pi],['-$\pi$','0','$\pi$'])
+    plt.yticks([-np.pi,0,np.pi],['-$\pi$','0','$\pi$'])
+    plt.show()
+
+def plot_FS_cont(eig,X,Y):
+    Nk=len(X)
+    fig=plt.figure()
+    ax=fig.add_subplot(111,aspect='equal')
+    for en in eig:
+        if(en.max()*en.min()<0.0):
+            plt.contour(X,Y,en.reshape(Nk,Nk),levels=[0.],colors='black')
     plt.xlim(-np.pi,np.pi)
     plt.ylim(-np.pi,np.pi)
     plt.xticks([-np.pi,0,np.pi],['-$\pi$','0','$\pi$'])
@@ -693,19 +705,28 @@ def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
     fig.colorbar(cont)
     plt.show()
 
-def get_conductivity(mesh,rvec,ham_r,ndegen,mu,temp):
+def get_conductivity(mesh,rvec,ham_r,ndegen,avec,mu,temp):
     """
     this function calculates conductivity at tau==1 from Boltzmann equation in metal
     """
-    kb=scconst.physical_constants['Boltzmann constant in eV/K'][0] #temp=kBT[eV], so it need to convert eV>K
-    ihbar=1./scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e-10
-    #kb=1.
-    eC=scconst.e*1.e10
+    if sw_unit:
+        kb=scconst.physical_constants['Boltzmann constant in eV/K'][0] #temp=kBT[eV], so it need to convert eV>K
+        ihbar=1./scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e-10 #unit of avec is \AA
+        eC=scconst.e*1.e30 #e*(\AA^3)
+        tau_u=1.e-15 #unit of tau is fs
+    else:
+        kb=1.
+        ihbar=1.
+        eC=1.
+        tau_u=1.
+    gsp=(1.0 if with_spin else 2.0)
     Nk,count,k_mpi=gen_klist(mesh)
+    Vuc=sclin.det(avec)
+
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
     dfermi=0.25*(1.-np.tanh(0.5*eig/temp)**2)/temp
-    veloc=np.array([get_vec(k,rvec,ham_r,ndegen).real for k in k_mpi])
+    veloc=np.array([get_vec(k,rvec,ham_r,ndegen,avec).real for k in k_mpi])
 
     l11=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
     l22=kb*np.array([[(vk1*vk2*eig**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
@@ -714,9 +735,10 @@ def get_conductivity(mesh,rvec,ham_r,ndegen,mu,temp):
     l22=comm.allreduce(l22,MPI.SUM)
     l12=comm.allreduce(l12,MPI.SUM)
 
-    Seebeck=l12.dot(sclin.inv(l11))/temp
-    sigma=eC*l11/(Nk*Vuc)
-    kappa=eC*l22/(temp*Nk*Vuc)
+    #Seebeck=l12.dot(sclin.inv(l11))/temp
+    Seebeck=gsp*kb*(l12/l11)/temp
+    sigma=gsp*tau_u*eC*l11/(Nk*Vuc)
+    kappa=gsp*tau_u*eC*kb*l22/(temp*Nk*Vuc)
 
     if rank==0:
         print('sigma matrix')
@@ -795,7 +817,7 @@ def get_mass(mesh,rvec,ham_r,ndegen,mu,de=3.e-4,meshkz=20):
         else:
             Nk=None
             sendbuf=None
-            count=np.empty(size,dtype=np.int)
+            count=np.empty(size,dtype='i8')
             displ=None
         Nk=comm.bcast(Nk,root=0)
         comm.Bcast(count,root=0)
@@ -990,14 +1012,14 @@ def get_mass(mesh,rvec,ham_r,ndegen,mu,de=3.e-4,meshkz=20):
     obtain_mass(kz_Smax,sband,'m_max')
     obtain_mass(kz_Smin,sband2,'m_min')
 
-def main():
+def import_hamiltonian(fname,sw_inp):
     if rank==0:
         if sw_inp==0: #.input file
             rvec,ndegen,ham_r,no,nr=input_ham.import_out(fname,False)
         elif sw_inp==1: #rvec.txt, ham_r.txt, ndegen.txt files
             rvec,ndegen,ham_r,no,nr=input_ham.import_hop(fname,True,False)
             ham_r=ham_r.flatten()
-        elif sw_inp==2:
+        elif sw_inp==2: #from _hr.dat file
             rvec,ndegen,ham_r,no,nr=input_ham.import_hr(fname,False)
             ham_r=ham_r.flatten()
         elif sw_inp==3: #Hopping.dat file
@@ -1026,72 +1048,84 @@ def main():
         if rank!=0:
             axis=np.empty([3,3],dtype='f8')
         comm.Bcast(axis,root=0)
+    return(no,nr,rvec,ham_r,ndegen)
+
+def get_hams(klist,rvec,ham_r,ndegen,no):
+    Nk=len(klist)
+    if rank==0:
+        sendbuf=klist.flatten()
+        cks=divmod(sendbuf.size//3,size)
+        count=np.array([3*(cks[0]+1) if i<cks[1] else 3*cks[0] for i in range(size)])
+        displ=np.array([sum(count[:i]) for i in range(size)])
+    else:
+        sendbuf=None
+        count=np.empty(size,dtype='i8')
+        displ=None
+    comm.Bcast(count,root=0)
+    recvbuf=np.empty(count[rank],dtype='f8')
+    comm.Scatterv([sendbuf,count,displ,MPI.DOUBLE],recvbuf, root=0)
+    count=count//3
+    k_mpi=recvbuf.reshape(count[rank],3)
+    ham_mpi=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
+    sendbuf=ham_mpi.flatten()
+    if rank==0:
+        count=count*no*no
+        recvbuf=np.empty(count.sum(),dtype='c16')
+        displ=np.array([count[:i].sum() for i in range(size)])
+    else:
+        recvbuf=None
+        displ=None
+    comm.Bcast(count,root=0)
+    comm.Gatherv(sendbuf,[recvbuf,count,displ,MPI.DOUBLE_COMPLEX],root=0)
+
+    if rank==0:
+        ham=recvbuf.reshape(Nk,no,no)
+    else:
+        ham=None
+    return ham
+
+def main():
+    no,nr,rvec,ham_r,ndegen=import_hamiltonian(fname,sw_inp)
+
     if sw_calc_mu:
         mu=get_mu(fill,rvec,ham_r,ndegen,temp)
     else:
         try:
             mu
         except NameError:
-            mu=get_mu(fill,rvec,ham_r,ndegen)
+            mu=get_mu(fill,rvec,ham_r,ndegen,temp)
 
     if sw_dec_axis:
         rvec1=np.array([Arot.T.dot(r) for r in rvec])
         rvec=rvec1
         if brav in {1,2}:
             rvec[:,2]=rvec[:,2]*2.
-
-    if option in (0,1,4,5):
-        if option in (0,4):
-            klist,spa_length,xticks=mk_klist(k_list,N)
-        else: #1,5
-            klist,X,Y=make_kmesh(FSmesh,2,kz,sw=True)
-        Nk=len(klist)
-        if rank==0:
-            sendbuf=klist.flatten()
-            cks=divmod(sendbuf.size//3,size)
-            count=np.array([3*(cks[0]+1) if i<cks[1] else 3*cks[0] for i in range(size)])
-            displ=np.array([sum(count[:i]) for i in range(size)])
-        else:
-            sendbuf=None
-            count=np.empty(size,dtype=np.int)
-            displ=None
-        comm.Bcast(count,root=0)
-        recvbuf=np.empty(count[rank],dtype='f8')
-        comm.Scatterv([sendbuf,count,displ,MPI.DOUBLE],recvbuf, root=0)
-        count=count//3
-        k_mpi=recvbuf.reshape(count[rank],3)
-        ham_mpi=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
-        sendbuf=ham_mpi.flatten()
-        if rank==0:
-            count=count*no*no
-            recvbuf=np.empty(count.sum(),dtype='c16')
-            displ=np.array([count[:i].sum() for i in range(size)])
-        else:
-            recvbuf=None
-            displ=None
-        comm.Bcast(count,root=0)
-        comm.Gatherv(sendbuf,[recvbuf,count,displ,MPI.DOUBLE_COMPLEX],root=0)
-        if rank==0:
-            ham=recvbuf.reshape(Nk,no,no)
-            if option in (0,1):
-                eig,uni=gen_eig(ham,mass,mu,True)
-        else:
-            if option==4:
-                ham=np.empty([Nk,no,no],dtype='c16')
-            else:
-                ham=None
-            eig=None
-            uni=None
+        elif brav==5:
+            rvec=rvec*2.
+        avec=(alatt*np.eye(3))*.5
+    else:
+        avec=alatt*Arot
+        bvec=sclin.inv(avec).T
 
     if option==0: #band plot
+        klist,spa_length,xticks=mk_klist(k_list,N)
+        ham=get_hams(klist,rvec,ham_r,ndegen,no)
         if rank==0:
+            eig,uni=gen_eig(ham,mass,mu,True)
             plot_band(eig,spa_length,xticks,uni,olist)
     elif option==1: #write Fermi surfaces at kz
-        klist1,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,mu,kz)
-        if rank==0:
-            ham1=np.array([[get_ham(k,rvec,ham_r,ndegen) for k in kk] for kk in klist1])
-            uni=np.array([[sclin.eigh(h)[1][:,b] for h in hh] for hh,b in zip(ham1,blist)])
-            plot_FS(uni,klist1,olist,eig,X,Y,sw_color)
+        if sw_color:
+            klist,blist=mk_kf(FSmesh,rvec,ham_r,ndegen,mu,kz)
+            if rank==0:
+                ham=[[[get_ham(k,rvec,ham_r,ndegen) for k in klsurf] for klsurf in klb] for klb in klist]
+                uni=[[np.array([sclin.eigh(h)[1][:,b] for h in hh]) for hh in hb] for hb,b in zip(ham,blist)]
+                plot_FS(uni,klist,olist)
+        else:
+            klist,X,Y=make_kmesh(FSmesh,2,kz,sw=True)
+            ham=get_hams(klist,rvec,ham_r,ndegen,no)
+            if rank==0:
+                eig,uni=gen_eig(ham,mass,mu,True)
+                plot_FS_cont(eig,X,Y)
     elif option==2: #write 3D Fermi surfaces
         if sw_color: #plot orbital weight on 3D Ferrmi surfaces
             gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu,1)
@@ -1100,18 +1134,21 @@ def main():
     elif option==3: #plot size of Fermi velocity on 3D Fermi surfacea
         gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu,2)
     elif option==4: #write Fermi velocity on 2D Fermi surfaces
-        klist,blist=mk_kf(FSmesh,True,2,rvec,ham_r,ndegen,mu,kz)
+        klist,blist=mk_kf(FSmesh,rvec,ham_r,ndegen,mu,kz)
         if rank==0:
-            veloc=[[get_vec(k,rvec,ham_r,ndegen)[b].real for k in kk] for b,kk in zip(blist,klist)]
+            veloc=[[np.array([get_vec(k,rvec,ham_r,ndegen,avec)[b].real for k in kk]) for kk in kb]
+                   for b,kb in zip(blist,klist)]
             plot_vec2(veloc,klist)
     elif option==5: #plot spectrum like band plot
+        klist,spa_length,xticks=mk_klist(k_list,N)
+        ham=get_hams(klist,rvec,ham_r,ndegen,no)
         comm.Bcast(ham,root=0)
         plot_spectrum(ham,spa_length,xticks,mu,eta,wmesh)
     elif option==6: #plot spectrum at E=EF
         if rank==0:
             plot_FSsp(ham,mu,X,Y,eta)
     elif option==7: #plot conductivity
-        get_conductivity(FSmesh,rvec,ham_r,ndegen,mu,temp)
+        get_conductivity(FSmesh,rvec,ham_r,ndegen,avec,mu,temp)
     elif option==8: #plot dos
         plot_dos(FSmesh,rvec,ham_r,ndegen,mu,no,eta,wmesh)
     elif option==9: #plot carrier number
