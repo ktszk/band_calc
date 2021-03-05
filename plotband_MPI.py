@@ -12,7 +12,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=4
+option=7
 """
 option: switch calculation modes
  0: band plot
@@ -37,7 +37,7 @@ de=1.e-4
 kz=np.pi*0.
 sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
-with_spin=False #use only with soc hamiltonian
+with_spin=False      #use only with soc hamiltonian
 mass=1.0             #effective mass
 sw_unit=True
 
@@ -710,44 +710,44 @@ def get_conductivity(mesh,rvec,ham_r,ndegen,avec,mu,temp):
     this function calculates conductivity at tau==1 from Boltzmann equation in metal
     """
     if sw_unit:
-        kb=scconst.physical_constants['Boltzmann constant in eV/K'][0] #temp=kBT[eV], so it need to convert eV>K
-        ihbar=1./scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e-10 #unit of avec is \AA
-        eC=scconst.e*1.e30 #e*(\AA^3)
-        tau_u=1.e-15 #unit of tau is fs
+        kb=scconst.physical_constants['Boltzmann constant in eV/K'][0] #the unit of temp is kBT[eV], so it need to convert eV>K
+        eC=scconst.e #electron charge, it need to convert eV>J (1eV=eCJ)
+        tau_u=1.e-15 #unit of tau is sec. default of tau is 1fs
     else:
         kb=1.
-        ihbar=1.
         eC=1.
         tau_u=1.
-    gsp=(1.0 if with_spin else 2.0)
+    gsp=(1.0 if with_spin else 2.0) #spin weight
     Nk,count,k_mpi=gen_klist(mesh)
-    Vuc=sclin.det(avec)
+    Vuc=sclin.det(avec)*1e-30 #unit is AA^3. Nk*Vuc is Volume of system.
 
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
     dfermi=0.25*(1.-np.tanh(0.5*eig/temp)**2)/temp
     veloc=np.array([get_vec(k,rvec,ham_r,ndegen,avec).real for k in k_mpi])
 
-    l11=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
-    l22=kb*np.array([[(vk1*vk2*eig**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
-    l12=kb*np.array([[(vk1*vk2*eig*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
-    l11=comm.allreduce(l11,MPI.SUM)
-    l22=comm.allreduce(l22,MPI.SUM)
-    l12=comm.allreduce(l12,MPI.SUM)
+    K0=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
+    K1=np.array([[(vk1*vk2*eig**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
+    K2=np.array([[(vk1*vk2*eig*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
+    K0=comm.allreduce(K0,MPI.SUM)
+    K1=comm.allreduce(K1,MPI.SUM)
+    K2=comm.allreduce(K2,MPI.SUM)
 
-    #Seebeck=l12.dot(sclin.inv(l11))/temp
-    Seebeck=gsp*kb*(l12/l11)/temp
-    sigma=gsp*tau_u*eC*l11/(Nk*Vuc)
-    kappa=gsp*tau_u*eC*kb*l22/(temp*Nk*Vuc)
+    sigma=gsp*tau_u*eC*K0/(Nk*Vuc)         #sigma=e^2K0 (A/Vm) :1eC is cannceled with eV>J
+    kappa=gsp*tau_u*kb*eC*K2/(temp*Nk*Vuc) #kappa=K2/T (W/Km) :eC(kb) appears with converting eV>J(eV>K)
+    Seebeck=kb*sclin.inv(K0).dot(K1)/temp  #S=K0^(-1)K1/eT (V/K) :kb appears with converting eV>K
+    Pertier=K1.dot(sclin.inv(K0))          #pi=K1K0^(-1)/e (V:J/C) :eC is cannceled with eV>J
 
     if rank==0:
         print('sigma matrix')
         print(sigma)
-        print('Seebeck matrix')
-        print(Seebeck)
         print('kappa matrix')
         print(kappa)
-        print('lorenz matrix')
+        print('Seebeck matrix')
+        print(Seebeck)
+        print('Pertier matrix')
+        print(Pertier)
+        print('Lorenz matrix')
         print(kb*kappa/(sigma*temp))
 
 def get_carrier_num(mesh,rvec,ham_r,ndegen,mu):
