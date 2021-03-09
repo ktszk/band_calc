@@ -12,7 +12,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=7
+option=3
 """
 option: switch calculation modes
  0: band plot
@@ -29,13 +29,13 @@ option: switch calculation modes
 """
 
 N=200                #kmesh btween symmetry points
-FSmesh=80           #kmesh for option in {1,2,3,5,6}
+FSmesh=40           #kmesh for option in {1,2,3,5,6}
 wmesh=200
 (emin,emax)=(-10,10)
 eta=1.0e-3           #eta for green function
 de=1.e-4
 kz=np.pi*0.
-sw_dec_axis=False    #transform Cartesian axis
+sw_dec_axis=True    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
 with_spin=False      #use only with soc hamiltonian
 mass=1.0             #effective mass
@@ -193,12 +193,14 @@ def get_vec(k,rvec,ham_r,ndegen,avec):
         ihbar=1./scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e-10
     else:
         ihbar=1.
-    len_avec=np.sqrt(np.abs(avec).sum(axis=1))
+    #len_avec=np.sqrt((avec**2).sum(axis=1))
     ham,expk,no,nr=get_ham(k,rvec,ham_r,ndegen,out_phase=True)
     uni=sclin.eigh(ham)[1]
     vec0=np.array([-1j*ihbar*(ham_r.reshape(no*no,nr)*(r*expk)).sum(axis=1).reshape(no,no)
-                    for r in (len_avec*rvec).T])
-    vec=np.array([(uni.conjugate().T.dot(v0).dot(uni)).diagonal() for v0 in vec0]).T
+                    for r in rvec.T])
+    vecb=np.array([(uni.conjugate().T.dot(v0).dot(uni)).diagonal() for v0 in vec0]).T
+    #vec=vecb*len_avec
+    vec=np.array([avec.T.dot(vb) for vb in vecb])
     return vec
 
 def gen_eig(ham,mass,mu,sw):
@@ -228,7 +230,7 @@ def get_col(cl,ol):
          else (np.abs(cl[ol])**2).sum(axis=0)).round(4)
     return col
 
-def mk_klist(k_list,N):
+def mk_klist(k_list,N,bvec):
     """
     This function generates klist of spaghetti.
     arguments:
@@ -285,7 +287,7 @@ def plot_band(eig,spl,xticks,uni,ol):
     plt.xticks(xticks,xlabel)
     plt.show()
 
-def plot_spectrum(ham,klen,xticks,mu,eta0=5.e-2,de=100,smesh=200):
+def plot_spectrum(ham,klen,xticks,mu,eta0=5.e-2,de=100,smesh=200,etamax=4.0):
     """
     This function plot spaghetti like spectrum.
     arguments:
@@ -314,7 +316,6 @@ def plot_spectrum(ham,klen,xticks,mu,eta0=5.e-2,de=100,smesh=200):
     no=len(ham[0])
     nk=len(ham)
 
-    etamax=4.0e0
     #eta=w*0+eta0
     eta=etamax*w*w/min(emax*emax,emin*emin)+eta0
     G=np.array([[-sclin.inv((ww+mu+et*1j)*np.identity(no)-h) for h in ham] for ww,et in zip(w,eta)])
@@ -405,7 +406,7 @@ def mk_kf(mesh,rvec,ham_r,ndegen,mu,kz=0):
         fsband=None
     return v2,fsband
 
-def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,surface_opt=0):
+def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,avec,surface_opt=0):
     """
     This function plot 3D Fermi Surface
     argument:
@@ -470,7 +471,8 @@ def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,surface_opt=0):
                         else:
                             vtmp=get_vec(ave_verts,rvec,ham_r,ndegen,avec)[i].real
                             avev=avev+np.abs(vtmp)
-                            absv=np.abs(vtmp).sum()
+                            absv=np.sqrt((vtmp**2).sum())
+                            #absv=vtmp[0]
                             v_weight.append(absv)
                             vc.append(ave_verts)
                     if(surface_opt==2):
@@ -678,16 +680,6 @@ def plot_FS_cont(eig,X,Y):
     plt.xticks([-np.pi,0,np.pi],['-$\pi$','0','$\pi$'])
     plt.yticks([-np.pi,0,np.pi],['-$\pi$','0','$\pi$'])
     plt.show()
-
-def plot_vec(veloc,eig,X,Y):
-    fig=plt.figure()
-    ax=fig.add_subplot(111,aspect='equal')
-    for v,en in zip(veloc,eig):
-        plt.contourf(X,Y,v.reshape(FSmesh,FSmesh).real,100)
-        plt.colorbar()
-        if(en.max()*en.min()<0.0):
-            plt.contour(X,Y,en.reshape(FSmesh,FSmesh),levels=[0.])
-        plt.show()
 
 def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
     no=len(ham[0])
@@ -1081,7 +1073,8 @@ def get_hams(klist,rvec,ham_r,ndegen,no):
     if rank==0:
         ham=recvbuf.reshape(Nk,no,no)
     else:
-        ham=None
+        ham=np.empty([Nk,no,no],dtype='c16')
+    comm.Bcast(ham,root=0)
     return ham
 
 def main():
@@ -1105,10 +1098,10 @@ def main():
         avec=(alatt*np.eye(3))*.5
     else:
         avec=alatt*Arot
-        bvec=sclin.inv(avec).T
+    bvec=sclin.inv(avec).T
 
     if option==0: #band plot
-        klist,spa_length,xticks=mk_klist(k_list,N)
+        klist,spa_length,xticks=mk_klist(k_list,N,bvec)
         ham=get_hams(klist,rvec,ham_r,ndegen,no)
         if rank==0:
             eig,uni=gen_eig(ham,mass,mu,True)
@@ -1128,11 +1121,11 @@ def main():
                 plot_FS_cont(eig,X,Y)
     elif option==2: #write 3D Fermi surfaces
         if sw_color: #plot orbital weight on 3D Ferrmi surfaces
-            gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu,1)
+            gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu,avec,1)
         else:
-            gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu)
+            gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu,avec)
     elif option==3: #plot size of Fermi velocity on 3D Fermi surfacea
-        gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu,2)
+        gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu,avec,2)
     elif option==4: #write Fermi velocity on 2D Fermi surfaces
         klist,blist=mk_kf(FSmesh,rvec,ham_r,ndegen,mu,kz)
         if rank==0:
@@ -1140,9 +1133,8 @@ def main():
                    for b,kb in zip(blist,klist)]
             plot_vec2(veloc,klist)
     elif option==5: #plot spectrum like band plot
-        klist,spa_length,xticks=mk_klist(k_list,N)
+        klist,spa_length,xticks=mk_klist(k_list,N,bvec)
         ham=get_hams(klist,rvec,ham_r,ndegen,no)
-        comm.Bcast(ham,root=0)
         plot_spectrum(ham,spa_length,xticks,mu,eta,wmesh)
     elif option==6: #plot spectrum at E=EF
         if rank==0:
