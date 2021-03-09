@@ -29,7 +29,7 @@ option: switch calculation modes
 """
 
 N=200                #kmesh btween symmetry points
-FSmesh=40           #kmesh for option in {1,2,3,5,6}
+FSmesh=80           #kmesh for option in {1,2,3,5,6}
 wmesh=200
 (emin,emax)=(-10,10)
 eta=1.0e-3           #eta for green function
@@ -727,8 +727,8 @@ def get_conductivity(mesh,rvec,ham_r,ndegen,avec,mu,temp):
     veloc=np.array([get_vec(k,rvec,ham_r,ndegen,avec).real for k in k_mpi])
 
     K0=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
-    K1=np.array([[(vk1*vk2*eig**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
-    K2=np.array([[(vk1*vk2*eig*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
+    K1=np.array([[(vk1*vk2*eig*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
+    K2=np.array([[(vk1*vk2*eig**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
     K0=comm.allreduce(K0,MPI.SUM)
     K1=comm.allreduce(K1,MPI.SUM)
     K2=comm.allreduce(K2,MPI.SUM)
