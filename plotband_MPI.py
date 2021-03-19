@@ -2,7 +2,8 @@
 #-*- coding:utf-8 -*-
 import numpy as np
 
-fname='Cu' #hamiltonian file name
+fname='Sr2RuO4' #hamiltonian file name
+#fname='Cu' #hamiltonian file name
 sw_inp=2             #input hamiltonian format
 """
 sw_inp: switch input hamiltonian's format
@@ -12,7 +13,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=3
+option=7
 """
 option: switch calculation modes
  0: band plot
@@ -29,26 +30,28 @@ option: switch calculation modes
 """
 
 N=200                #kmesh btween symmetry points
-FSmesh=40           #kmesh for option in {1,2,3,5,6}
+FSmesh=40            #kmesh for option in {1,2,3,5,6}
 wmesh=200
-(emin,emax)=(-10,10)
+(emin,emax)=(-3,1)
 eta=1.0e-3           #eta for green function
 de=1.e-4
 kz=np.pi*0.
-sw_dec_axis=True    #transform Cartesian axis
+sw_dec_axis=True     #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
-with_spin=False      #use only with soc hamiltonian
+with_spin=True       #use only with soc hamiltonian
 mass=1.0             #effective mass
 sw_unit=True
 
 sw_calc_mu =True
-fill=5.50
-brav=5 #0:sc, 1,2: bc, 3: orthorhombic, 4: monoclinic
+fill=4.00
+#fill=5.50
+brav=2 #0:sc, 1,2: bc, 3: orthorhombic, 4: monoclinic 5: fcc
 #temp=1.0e-9
-temp=0.91e-2
-mu=12.494              #chemical potential
+temp=0.91e-2 #~100K
+mu=0.0              #chemical potential
 
-alatt=np.array([6.83,6.83,6.83])
+alatt=np.array([3.8603,3.8603,12.729])
+#alatt=np.array([6.83,6.83,6.83])
 #alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
 #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
 olist=[0,[1,2],3]
@@ -199,8 +202,8 @@ def get_vec(k,rvec,ham_r,ndegen,avec):
     vec0=np.array([-1j*ihbar*(ham_r.reshape(no*no,nr)*(r*expk)).sum(axis=1).reshape(no,no)
                     for r in rvec.T])
     vecb=np.array([(uni.conjugate().T.dot(v0).dot(uni)).diagonal() for v0 in vec0]).T
-    #vec=vecb*len_avec
-    vec=np.array([avec.T.dot(vb) for vb in vecb])
+    #vec=vecb #*len_avec
+    vec=np.array([avec.T.dot(vb) for vb in vecb]).real
     return vec
 
 def gen_eig(ham,mass,mu,sw):
@@ -469,10 +472,10 @@ def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,avec,surface_opt=0):
                             clst=[get_col(cl,ol) for ol in olist]
                             v_weight.append(colors.rgb2hex(clst))
                         else:
-                            vtmp=get_vec(ave_verts,rvec,ham_r,ndegen,avec)[i].real
+                            vtmp=get_vec(ave_verts,rvec,ham_r,ndegen,avec)[i]
                             avev=avev+np.abs(vtmp)
-                            absv=np.sqrt((vtmp**2).sum())
-                            #absv=vtmp[0]
+                            absv=np.sqrt((abs(vtmp)**2).sum())
+                            #absv=vtmp[2]
                             v_weight.append(absv)
                             vc.append(ave_verts)
                     if(surface_opt==2):
@@ -716,8 +719,8 @@ def get_conductivity(mesh,rvec,ham_r,ndegen,avec,mu,temp):
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
     dfermi=0.25*(1.-np.tanh(0.5*eig/temp)**2)/temp
-    veloc=np.array([get_vec(k,rvec,ham_r,ndegen,avec).real for k in k_mpi])
-
+    veloc=np.array([get_vec(k,rvec,ham_r,ndegen,avec) for k in k_mpi])
+    #Kn=sum_k(v*v*(e-mu)^n*(-df/de))
     K0=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
     K1=np.array([[(vk1*vk2*eig*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
     K2=np.array([[(vk1*vk2*eig**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
@@ -725,22 +728,33 @@ def get_conductivity(mesh,rvec,ham_r,ndegen,avec,mu,temp):
     K1=comm.allreduce(K1,MPI.SUM)
     K2=comm.allreduce(K2,MPI.SUM)
 
-    sigma=gsp*tau_u*eC*K0/(Nk*Vuc)         #sigma=e^2K0 (A/Vm) :1eC is cannceled with eV>J
-    kappa=gsp*tau_u*kb*eC*K2/(temp*Nk*Vuc) #kappa=K2/T (W/Km) :eC(kb) appears with converting eV>J(eV>K)
-    Seebeck=kb*sclin.inv(K0).dot(K1)/temp  #S=K0^(-1)K1/eT (V/K) :kb appears with converting eV>K
-    Pertier=K1.dot(sclin.inv(K0))          #pi=K1K0^(-1)/e (V:J/C) :eC is cannceled with eV>J
+    sigma=gsp*tau_u*eC*K0/(Nk*Vuc)          #sigma=e^2K0 (A/Vm) :1eC is cannceled with eV>J
+    kappa=gsp*tau_u*kb*eC*K2/(temp*Nk*Vuc)  #kappa=K2/T (W/Km) :eC(kb) appears with converting eV>J(eV>K)
+    #kappa=gsp*tau_u*kb*eC*(K2-K1.dot(sclin.inv(K0).dot(K1)))/(temp*Nk*Vuc)
+    sigmaS=gsp*tau_u*kb*eC*K1/(temp*Nk*Vuc) #sigmaS=eK1/T (A/mK)
+    Seebeck=kb*sclin.inv(K0).dot(K1)/temp   #S=K0^(-1)K1/eT (V/K) :kb appears with converting eV>K
+    Pertier=K1.dot(sclin.inv(K0))           #pi=K1K0^(-1)/e (V:J/C) :eC is cannceled with eV>J
+    PF=sigmaS.dot(Seebeck)
 
     if rank==0:
+        '''
+        sigma,kappa,sigmaS consistent with boltzwann in cartesian coordinate.
+        but S is sign inverted. should we multiply by a minus?
+        '''
         print('sigma matrix')
-        print(sigma)
+        print(sigma.round(10))
         print('kappa matrix')
-        print(kappa)
+        print(kappa.round(10))
+        print('sigmaS matrix')
+        print(sigmaS.round(10))
         print('Seebeck matrix')
-        print(Seebeck)
+        print(Seebeck.round(10))
         print('Pertier matrix')
-        print(Pertier)
+        print(Pertier.round(13))
         print('Lorenz matrix')
         print(kb*kappa/(sigma*temp))
+        print('Power Factor')
+        print(PF.round(10))
 
 def get_carrier_num(mesh,rvec,ham_r,ndegen,mu):
     Nk,count,k_mpi=gen_klist(mesh)
@@ -1093,9 +1107,11 @@ def main():
         rvec=rvec1
         if brav in {1,2}:
             rvec[:,2]=rvec[:,2]*2.
+            avec=(alatt*np.eye(3))
+            avec[:,2]=avec[:,2]*.5
         elif brav==5:
             rvec=rvec*2.
-        avec=(alatt*np.eye(3))*.5
+            avec=(alatt*np.eye(3))*.5
     else:
         avec=alatt*Arot
     bvec=sclin.inv(avec).T
@@ -1129,7 +1145,7 @@ def main():
     elif option==4: #write Fermi velocity on 2D Fermi surfaces
         klist,blist=mk_kf(FSmesh,rvec,ham_r,ndegen,mu,kz)
         if rank==0:
-            veloc=[[np.array([get_vec(k,rvec,ham_r,ndegen,avec)[b].real for k in kk]) for kk in kb]
+            veloc=[[np.array([get_vec(k,rvec,ham_r,ndegen,avec)[b] for k in kk]) for kk in kb]
                    for b,kb in zip(blist,klist)]
             plot_vec2(veloc,klist)
     elif option==5: #plot spectrum like band plot
