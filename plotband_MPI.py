@@ -2,8 +2,7 @@
 #-*- coding:utf-8 -*-
 import numpy as np
 
-fname='Sr2RuO4' #hamiltonian file name
-#fname='Cu' #hamiltonian file name
+fname='Cu' #hamiltonian file name
 sw_inp=2             #input hamiltonian format
 """
 sw_inp: switch input hamiltonian's format
@@ -32,26 +31,28 @@ option: switch calculation modes
 N=200                #kmesh btween symmetry points
 FSmesh=40            #kmesh for option in {1,2,3,5,6}
 wmesh=200
-(emin,emax)=(-3,1)
+(emin,emax)=(-3,3)
 eta=1.0e-3           #eta for green function
 de=1.e-4
 kz=np.pi*0.
 sw_dec_axis=True     #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
-with_spin=True       #use only with soc hamiltonian
+with_spin=False      #use only with soc hamiltonian
 mass=1.0             #effective mass
 sw_unit=True
 
 sw_calc_mu =True
-fill=4.00
-#fill=5.50
-brav=2 #0:sc, 1,2: bc, 3: orthorhombic, 4: monoclinic 5: fcc
+fill=5.50
+brav=5 #0:sc, 1,2: bc, 3: orthorhombic, 4: monoclinic 5: fcc
 #temp=1.0e-9
-temp=0.91e-2 #~100K
+temp=8.62e-3 #~100K if sw_tdep True upper limit of T
 mu=0.0              #chemical potential
 
-alatt=np.array([3.8603,3.8603,12.729])
-#alatt=np.array([6.83,6.83,6.83])
+sw_tdep=True #switch calc. t dep conductivity or not
+temp_min=8.62e-5 #lower limit of T
+tstep=3 #range of temp step
+
+alatt=np.array([6.83,6.83,6.83])
 #alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
 #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
 olist=[0,[1,2],3]
@@ -159,6 +160,12 @@ def get_mu(fill,rvec,ham_r,ndegen,temp,mesh=40):
     Nk,count,k_mpi=gen_klist(mesh)
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     e_mpi=np.array([sclin.eigvalsh(h) for h in ham]).T
+    mu=calc_mu(e_mpi,count,Nk,temp)
+    if rank==0:
+        print('chemical potential = %6.3f'%mu)
+    return mu
+
+def calc_mu(e_mpi,count,Nk,temp):
     sendbuf=e_mpi.flatten()
     if rank==0:
         no=sendbuf.size//count[rank]
@@ -172,10 +179,9 @@ def get_mu(fill,rvec,ham_r,ndegen,temp,mesh=40):
     comm.Gatherv(sendbuf,[recvbuf,count,displ,MPI.DOUBLE],root=0)
     if rank==0:
         eig=recvbuf.reshape(Nk,no)
-        f=lambda mu: 2.*fill*mesh**3+(np.tanh(0.5*(eig-mu)/temp)-1.).sum()
+        f=lambda mu: 2.*fill*Nk+(np.tanh(0.5*(eig-mu)/temp)-1.).sum()
         mu=scopt.brentq(f,eig.min(),eig.max())
         #mu=scopt.newton(f,0.5*(eig.min()+eig.max()))
-        print('chemical potential = %6.3f'%mu)
     else:
         mu=None
     mu=comm.bcast(mu,root=0)
@@ -700,10 +706,21 @@ def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
     fig.colorbar(cont)
     plt.show()
 
-def get_conductivity(mesh,rvec,ham_r,ndegen,avec,mu,temp):
+def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,tstep):
     """
     this function calculates conductivity at tau==1 from Boltzmann equation in metal
     """
+    def calc_Kn(eig,veloc,temp,mu):
+        dfermi=0.25*(1.-np.tanh(0.5*(eig-mu)/temp)**2)/temp
+        #Kn=sum_k(v*v*(e-mu)^n*(-df/de))
+        K0=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
+        K1=np.array([[(vk1*vk2*(eig-mu)*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
+        K2=np.array([[(vk1*vk2*(eig-mu)**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
+        K0=comm.allreduce(K0,MPI.SUM)
+        K1=comm.allreduce(K1,MPI.SUM)
+        K2=comm.allreduce(K2,MPI.SUM)
+        return(K0,K1,K2)
+
     if sw_unit:
         kb=scconst.physical_constants['Boltzmann constant in eV/K'][0] #the unit of temp is kBT[eV], so it need to convert eV>K
         eC=scconst.e #electron charge, it need to convert eV>J (1eV=eCJ)
@@ -715,46 +732,45 @@ def get_conductivity(mesh,rvec,ham_r,ndegen,avec,mu,temp):
     gsp=(1.0 if with_spin else 2.0) #spin weight
     Nk,count,k_mpi=gen_klist(mesh)
     Vuc=sclin.det(avec)*1e-30 #unit is AA^3. Nk*Vuc is Volume of system.
-
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
-    eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
-    dfermi=0.25*(1.-np.tanh(0.5*eig/temp)**2)/temp
-    veloc=np.array([get_vec(k,rvec,ham_r,ndegen,avec) for k in k_mpi])
-    #Kn=sum_k(v*v*(e-mu)^n*(-df/de))
-    K0=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
-    K1=np.array([[(vk1*vk2*eig*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
-    K2=np.array([[(vk1*vk2*eig**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
-    K0=comm.allreduce(K0,MPI.SUM)
-    K1=comm.allreduce(K1,MPI.SUM)
-    K2=comm.allreduce(K2,MPI.SUM)
+    eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass
+    veloc=np.array([get_vec(k,rvec,ham_r,ndegen,avec) for k in k_mpi])/mass
+    if sw_tdep:
+        temp0=np.linspace(temp_min,temp_max,tstep)
+    else:
+        temp0=[temp_max]
+    for temp in temp0:
+        mu=calc_mu(eig,count,Nk,temp)
+        K0,K1,K2=calc_Kn(eig,veloc,temp,mu)
+        sigma=gsp*tau_u*eC*K0/(Nk*Vuc)          #sigma=e^2K0 (A/Vm) :1eC is cannceled with eV>J
+        kappa=gsp*tau_u*kb*eC*K2/(temp*Nk*Vuc)  #kappa=K2/T (W/Km) :eC(kb) appears with converting eV>J(eV>K)
+        #kappa=gsp*tau_u*kb*eC*(K2-K1.dot(sclin.inv(K0).dot(K1)))/(temp*Nk*Vuc)
+        sigmaS=gsp*tau_u*kb*eC*K1/(temp*Nk*Vuc) #sigmaS=eK1/T (A/mK)
+        Seebeck=kb*sclin.inv(K0).dot(K1)/temp   #S=K0^(-1)K1/eT (V/K) :kb appears with converting eV>K
+        Pertier=K1.dot(sclin.inv(K0))           #pi=K1K0^(-1)/e (V:J/C) :eC is cannceled with eV>J
+        PF=sigmaS.dot(Seebeck)
 
-    sigma=gsp*tau_u*eC*K0/(Nk*Vuc)          #sigma=e^2K0 (A/Vm) :1eC is cannceled with eV>J
-    kappa=gsp*tau_u*kb*eC*K2/(temp*Nk*Vuc)  #kappa=K2/T (W/Km) :eC(kb) appears with converting eV>J(eV>K)
-    #kappa=gsp*tau_u*kb*eC*(K2-K1.dot(sclin.inv(K0).dot(K1)))/(temp*Nk*Vuc)
-    sigmaS=gsp*tau_u*kb*eC*K1/(temp*Nk*Vuc) #sigmaS=eK1/T (A/mK)
-    Seebeck=kb*sclin.inv(K0).dot(K1)/temp   #S=K0^(-1)K1/eT (V/K) :kb appears with converting eV>K
-    Pertier=K1.dot(sclin.inv(K0))           #pi=K1K0^(-1)/e (V:J/C) :eC is cannceled with eV>J
-    PF=sigmaS.dot(Seebeck)
-
-    if rank==0:
-        '''
-        sigma,kappa,sigmaS consistent with boltzwann in cartesian coordinate.
-        but S is sign inverted. should we multiply by a minus?
-        '''
-        print('sigma matrix')
-        print(sigma.round(10))
-        print('kappa matrix')
-        print(kappa.round(10))
-        print('sigmaS matrix')
-        print(sigmaS.round(10))
-        print('Seebeck matrix')
-        print(Seebeck.round(10))
-        print('Pertier matrix')
-        print(Pertier.round(13))
-        print('Lorenz matrix')
-        print(kb*kappa/(sigma*temp))
-        print('Power Factor')
-        print(PF.round(10))
+        if rank==0:
+            '''
+            sigma,kappa,sigmaS consistent with boltzwann in cartesian coordinate.
+            but S is sign inverted. should we multiply by a minus?
+            '''
+            print('temperature = %4.0d[K]'%int(temp/kb))
+            print('mu = %7.3f'%mu)
+            print('sigma matrix')
+            print(sigma.round(10))
+            print('kappa matrix')
+            print(kappa.round(10))
+            print('sigmaS matrix')
+            print(sigmaS.round(10))
+            print('Seebeck matrix')
+            print(Seebeck.round(10))
+            print('Pertier matrix')
+            print(Pertier.round(13))
+            print('Lorenz matrix')
+            print(kb*kappa/(sigma*temp))
+            print('Power Factor')
+            print(PF.round(10))
 
 def get_carrier_num(mesh,rvec,ham_r,ndegen,mu):
     Nk,count,k_mpi=gen_klist(mesh)
@@ -1094,7 +1110,7 @@ def get_hams(klist,rvec,ham_r,ndegen,no):
 def main():
     no,nr,rvec,ham_r,ndegen=import_hamiltonian(fname,sw_inp)
 
-    if sw_calc_mu:
+    if sw_calc_mu and option!=7:
         mu=get_mu(fill,rvec,ham_r,ndegen,temp)
     else:
         try:
@@ -1156,7 +1172,7 @@ def main():
         if rank==0:
             plot_FSsp(ham,mu,X,Y,eta)
     elif option==7: #plot conductivity
-        get_conductivity(FSmesh,rvec,ham_r,ndegen,avec,mu,temp)
+        get_conductivity(sw_tdep,FSmesh,rvec,ham_r,ndegen,avec,fill,temp,temp_min,tstep)
     elif option==8: #plot dos
         plot_dos(FSmesh,rvec,ham_r,ndegen,mu,no,eta,wmesh)
     elif option==9: #plot carrier number
