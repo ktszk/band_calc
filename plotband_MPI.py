@@ -35,7 +35,7 @@ wmesh=200
 eta=1.0e-3           #eta for green function
 de=1.e-4
 kz=np.pi*0.
-sw_dec_axis=True     #transform Cartesian axis
+sw_dec_axis=True    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
 with_spin=False      #use only with soc hamiltonian
 mass=1.0             #effective mass
@@ -513,93 +513,64 @@ def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,avec,surface_opt=0):
         plt.tight_layout()
 
         if brav==0:
-            ax.plot([-np.pi,np.pi],[np.pi,np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-np.pi,np.pi],[np.pi,np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-np.pi,np.pi],[-np.pi,-np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-np.pi,np.pi],[-np.pi,-np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
+            BZtops=[[[-np.pi,np.pi],[np.pi,np.pi],[np.pi,np.pi]],[[-np.pi,np.pi],[np.pi,np.pi],[-np.pi,-np.pi]],
+                    [[-np.pi,np.pi],[-np.pi,-np.pi],[np.pi,np.pi]],[[-np.pi,np.pi],[-np.pi,-np.pi],[-np.pi,-np.pi]],
 
-            ax.plot([np.pi,np.pi],[-np.pi,np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([np.pi,np.pi],[-np.pi,np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-np.pi,-np.pi],[-np.pi,np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-np.pi,-np.pi],[-np.pi,np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
+                    [[np.pi,np.pi],[-np.pi,np.pi],[np.pi,np.pi]],[[np.pi,np.pi],[-np.pi,np.pi],[-np.pi,-np.pi]],
+                    [[-np.pi,-np.pi],[-np.pi,np.pi],[np.pi,np.pi]],[[-np.pi,-np.pi],[-np.pi,np.pi],[-np.pi,-np.pi]],
 
-            ax.plot([np.pi,np.pi],[np.pi,np.pi],[-np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([np.pi,np.pi],[-np.pi,-np.pi],[-np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-np.pi,-np.pi],[np.pi,np.pi],[-np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-np.pi,-np.pi],[-np.pi,-np.pi],[-np.pi,np.pi],ls='-',lw=1.,color='black')
+                    [[np.pi,np.pi],[np.pi,np.pi],[-np.pi,np.pi]],[[np.pi,np.pi],[-np.pi,-np.pi],[-np.pi,np.pi]],
+                    [[-np.pi,-np.pi],[np.pi,np.pi],[-np.pi,np.pi]],[[-np.pi,-np.pi],[-np.pi,-np.pi],[-np.pi,np.pi]]]
         elif brav==4:
             da=0.0088435
             dc=0.12914
-            ax.plot([(1.-da)*np.pi,(1.-da)*np.pi],[-np.pi,np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.-da)*np.pi,-(1.-da)*np.pi],[-np.pi,np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
-            ax.plot([(1-da)*np.pi,(1.-da)*np.pi],[-np.pi,np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.-da)*np.pi,-(1.-da)*np.pi],[-np.pi,np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
+            BZtops=[[[(1.-da)*np.pi,(1.-da)*np.pi],[-np.pi,np.pi],[np.pi,np.pi]],[[-(1.-da)*np.pi,-(1.-da)*np.pi],[-np.pi,np.pi],[-np.pi,-np.pi]],
+                    [[(1-da)*np.pi,(1.-da)*np.pi],[-np.pi,np.pi],[-np.pi,-np.pi]],[[-(1.-da)*np.pi,-(1.-da)*np.pi],[-np.pi,np.pi],[np.pi,np.pi]],
 
-            ax.plot([-(1.-da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.-da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.-da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.-da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
+                    [[-(1.-da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[np.pi,np.pi]],[[-(1.-da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[-np.pi,-np.pi]],
+                    [[-(1.-da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[np.pi,np.pi]],[[-(1.-da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[-np.pi,-np.pi]],
 
-            ax.plot([(1.+da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[-(1.-dc)*np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([(1.+da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[-(1.-dc)*np.pi,-np.pi],ls='-',lw=1.,color='black')
-            ax.plot([(1.+da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[-(1.-dc)*np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([(1.+da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[-(1.-dc)*np.pi,-np.pi],ls='-',lw=1.,color='black')
-            ax.plot([(1.+da)*np.pi,(1.+da)*np.pi],[-np.pi,np.pi],[-(1.-dc)*np.pi,-(1.-dc)*np.pi],ls='-',lw=1.,color='black')
+                    [[(1.+da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[-(1.-dc)*np.pi,np.pi]],[[(1.+da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[-(1.-dc)*np.pi,-np.pi]],
+                    [[(1.+da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[-(1.-dc)*np.pi,np.pi]],[[(1.+da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[-(1.-dc)*np.pi,-np.pi]],
+                    [[(1.+da)*np.pi,(1.+da)*np.pi],[-np.pi,np.pi],[-(1.-dc)*np.pi,-(1.-dc)*np.pi]],
 
-            ax.plot([-(1.+da)*np.pi,-(1.-da)*np.pi],[np.pi,np.pi],[(1.-dc)*np.pi,-np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.+da)*np.pi,-(1.-da)*np.pi],[np.pi,np.pi],[(1.-dc)*np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.+da)*np.pi,-(1.-da)*np.pi],[-np.pi,-np.pi],[(1.-dc)*np.pi,-np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.+da)*np.pi,-(1.-da)*np.pi],[-np.pi,-np.pi],[(1.-dc)*np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.+da)*np.pi,-(1.+da)*np.pi],[-np.pi,np.pi],[(1.-dc)*np.pi,(1.-dc)*np.pi],ls='-',lw=1.,color='black')
+                    [[-(1.+da)*np.pi,-(1.-da)*np.pi],[np.pi,np.pi],[(1.-dc)*np.pi,-np.pi]],[[-(1.+da)*np.pi,-(1.-da)*np.pi],[np.pi,np.pi],[(1.-dc)*np.pi,np.pi]],
+                    [[-(1.+da)*np.pi,-(1.-da)*np.pi],[-np.pi,-np.pi],[(1.-dc)*np.pi,-np.pi]],[[-(1.+da)*np.pi,-(1.-da)*np.pi],[-np.pi,-np.pi],[(1.-dc)*np.pi,np.pi]],
+                    [[-(1.+da)*np.pi,-(1.+da)*np.pi],[-np.pi,np.pi],[(1.-dc)*np.pi,(1.-dc)*np.pi]]]
         elif brav in {1,2}:
             cpa=alatt[2]/alatt[0]
             icpa=1./cpa
             ep=icpa**2
             #top plain
-            ax.plot([-(1.-ep)*np.pi,(1.-ep)*np.pi],[(1-ep)*np.pi,(1-ep)*np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,-(1.-ep)*np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.-ep)*np.pi,-(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[np.pi,np.pi],ls='-',lw=1.,color='black')
-            #bottom plain
-            ax.plot([-(1.-ep)*np.pi,(1.-ep)*np.pi],[(1-ep)*np.pi,(1-ep)*np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,-(1.-ep)*np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
-            ax.plot([(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.-ep)*np.pi,-(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[-np.pi,-np.pi],ls='-',lw=1.,color='black')
+            BZtops=[[[-(1.-ep)*np.pi,(1.-ep)*np.pi],[(1-ep)*np.pi,(1-ep)*np.pi],[np.pi,np.pi]],[[-(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,-(1.-ep)*np.pi],[np.pi,np.pi]],
+                    [[(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[np.pi,np.pi]],[[-(1.-ep)*np.pi,-(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[np.pi,np.pi]],
+                    #bottom plain
+                    [[-(1.-ep)*np.pi,(1.-ep)*np.pi],[(1-ep)*np.pi,(1-ep)*np.pi],[-np.pi,-np.pi]],[[-(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,-(1.-ep)*np.pi],[-np.pi,-np.pi]],
+                    [[(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[-np.pi,-np.pi]],[[-(1.-ep)*np.pi,-(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[-np.pi,-np.pi]],
 
-            ax.plot([(1.-ep)*np.pi,np.pi],[(1.-ep)*np.pi,np.pi],[np.pi,.5*np.pi],ls='-',lw=1.,color='black')
-            ax.plot([(1.-ep)*np.pi,np.pi],[-(1.-ep)*np.pi,-np.pi],[np.pi,.5*np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.-ep)*np.pi,-np.pi],[(1.-ep)*np.pi,np.pi],[np.pi,.5*np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.-ep)*np.pi,-np.pi],[-(1.-ep)*np.pi,-np.pi],[np.pi,.5*np.pi],ls='-',lw=1.,color='black')
+                    [[(1.-ep)*np.pi,np.pi],[(1.-ep)*np.pi,np.pi],[np.pi,.5*np.pi]],[[(1.-ep)*np.pi,np.pi],[-(1.-ep)*np.pi,-np.pi],[np.pi,.5*np.pi]],
+                    [[-(1.-ep)*np.pi,-np.pi],[(1.-ep)*np.pi,np.pi],[np.pi,.5*np.pi]],[[-(1.-ep)*np.pi,-np.pi],[-(1.-ep)*np.pi,-np.pi],[np.pi,.5*np.pi]],
 
-            ax.plot([(1.-ep)*np.pi,np.pi],[(1.-ep)*np.pi,np.pi],[-np.pi,-.5*np.pi],ls='-',lw=1.,color='black')
-            ax.plot([(1.-ep)*np.pi,np.pi],[-(1.-ep)*np.pi,-np.pi],[-np.pi,-.5*np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.-ep)*np.pi,-np.pi],[(1.-ep)*np.pi,np.pi],[-np.pi,-.5*np.pi],ls='-',lw=1.,color='black')
-            ax.plot([-(1.-ep)*np.pi,-np.pi],[-(1.-ep)*np.pi,-np.pi],[-np.pi,-.5*np.pi],ls='-',lw=1.,color='black')
+                    [[(1.-ep)*np.pi,np.pi],[(1.-ep)*np.pi,np.pi],[-np.pi,-.5*np.pi]],[[(1.-ep)*np.pi,np.pi],[-(1.-ep)*np.pi,-np.pi],[-np.pi,-.5*np.pi]],
+                    [[-(1.-ep)*np.pi,-np.pi],[(1.-ep)*np.pi,np.pi],[-np.pi,-.5*np.pi]],[[-(1.-ep)*np.pi,-np.pi],[-(1.-ep)*np.pi,-np.pi],[-np.pi,-.5*np.pi]],
 
-            ax.plot([np.pi,(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[.5*np.pi,0.],ls='-',lw=1.,color='black')
-            ax.plot([np.pi,(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[.5*np.pi,0.],ls='-',lw=1.,color='black')
-            ax.plot([np.pi,(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[-.5*np.pi,0.],ls='-',lw=1.,color='black')
-            ax.plot([np.pi,(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[-.5*np.pi,0.],ls='-',lw=1.,color='black')
+                    [[np.pi,(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[.5*np.pi,0.]],[[np.pi,(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[.5*np.pi,0.]],
+                    [[np.pi,(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[-.5*np.pi,0.]],[[np.pi,(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[-.5*np.pi,0.]],
 
-            ax.plot([np.pi,(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[.5*np.pi,0.],ls='-',lw=1.,color='black')
-            ax.plot([np.pi,(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[.5*np.pi,0.],ls='-',lw=1.,color='black')
-            ax.plot([np.pi,(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[-.5*np.pi,0.],ls='-',lw=1.,color='black')
-            ax.plot([np.pi,(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[-.5*np.pi,0.],ls='-',lw=1.,color='black')
+                    [[np.pi,(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[.5*np.pi,0.]],[[np.pi,(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[.5*np.pi,0.]],
+                    [[np.pi,(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[-.5*np.pi,0.]],[[np.pi,(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[-.5*np.pi,0.]],
 
-            ax.plot([-np.pi,-(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[.5*np.pi,0.],ls='-',lw=1.,color='black')
-            ax.plot([-np.pi,-(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[.5*np.pi,0.],ls='-',lw=1.,color='black')
-            ax.plot([-np.pi,-(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[-.5*np.pi,0.],ls='-',lw=1.,color='black')
-            ax.plot([-np.pi,-(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[-.5*np.pi,0.],ls='-',lw=1.,color='black')
+                    [[-np.pi,-(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[.5*np.pi,0.]],[[-np.pi,-(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[.5*np.pi,0.]],
+                    [[-np.pi,-(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[-.5*np.pi,0.]],[[-np.pi,-(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[-.5*np.pi,0.]],
 
-            ax.plot([-np.pi,-(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[.5*np.pi,0.],ls='-',lw=1.,color='black')
-            ax.plot([-np.pi,-(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[.5*np.pi,0.],ls='-',lw=1.,color='black')
-            ax.plot([-np.pi,-(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[-.5*np.pi,0.],ls='-',lw=1.,color='black')
-            ax.plot([-np.pi,-(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[-.5*np.pi,0.],ls='-',lw=1.,color='black')
+                    [[-np.pi,-(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[.5*np.pi,0.]],[[-np.pi,-(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[.5*np.pi,0.]],
+                    [[-np.pi,-(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[-.5*np.pi,0.]],[[-np.pi,-(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[-.5*np.pi,0.]],
 
-            ax.plot([(1.-ep)*np.pi,-(1.-ep)*np.pi],[(1.+ep)*np.pi,(1.+ep)*np.pi],[0.,0.],ls='-',lw=1.,color='black')
-            ax.plot([(1.+ep)*np.pi,(1.+ep)*np.pi],[(1.-ep)*np.pi,-(1.-ep)*np.pi],[0.,0.],ls='-',lw=1.,color='black')
-            ax.plot([(1.-ep)*np.pi,-(1.-ep)*np.pi],[-(1.+ep)*np.pi,-(1.+ep)*np.pi],[0.,0.],ls='-',lw=1.,color='black')
-            ax.plot([-(1.+ep)*np.pi,-(1.+ep)*np.pi],[(1.-ep)*np.pi,-(1.-ep)*np.pi],[0.,0.],ls='-',lw=1.,color='black')
+                    [[(1.-ep)*np.pi,-(1.-ep)*np.pi],[(1.+ep)*np.pi,(1.+ep)*np.pi],[0.,0.]],[[(1.+ep)*np.pi,(1.+ep)*np.pi],[(1.-ep)*np.pi,-(1.-ep)*np.pi],[0.,0.]],
+                    [[(1.-ep)*np.pi,-(1.-ep)*np.pi],[-(1.+ep)*np.pi,-(1.+ep)*np.pi],[0.,0.]],[[-(1.+ep)*np.pi,-(1.+ep)*np.pi],[(1.-ep)*np.pi,-(1.-ep)*np.pi],[0.,0.]]]
+        if brav in {0,1,2,4}:
+            for tops in BZtops:
+                ax.plot(tops[0],tops[1],tops[2],ls='-',lw=1.,color='black')
 
         plt.show()
 
@@ -1123,11 +1094,13 @@ def main():
         rvec=rvec1
         if brav in {1,2}:
             rvec[:,2]=rvec[:,2]*2.
-            avec=(alatt*np.eye(3))
+            avec=alatt*np.eye(3)
             avec[:,2]=avec[:,2]*.5
         elif brav==5:
             rvec=rvec*2.
             avec=(alatt*np.eye(3))*.5
+        else:
+            avec=alatt*np.eye(3)
     else:
         avec=alatt*Arot
     bvec=sclin.inv(avec).T
