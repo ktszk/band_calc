@@ -5,5 +5,6 @@ model hamiltonian analysis tool
 - python3
 - numpy
 - scipy
+- scikit-image
 - matplotlib
 - mpi4py (for plotband_MPI.py)
