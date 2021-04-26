@@ -12,7 +12,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=7
+option=5
 """
 option: switch calculation modes
  0: band plot
@@ -30,9 +30,9 @@ option: switch calculation modes
 
 N=200                #kmesh btween symmetry points
 FSmesh=40            #kmesh for option in {1,2,3,5,6}
-wmesh=200            #w-mesh for dos and spectrum
-(emin,emax)=(-3,3)   #max and min energy
-eta=1.0e-3           #eta for green function
+wmesh=400            #w-mesh for dos and spectrum
+
+eta=2.0e-2           #eta for green function
 de=1.e-4             #delta for spectrum
 kz=np.pi*0.          #kz for option 1 and 6
 sw_dec_axis=False    #transform Cartesian axis
@@ -50,42 +50,25 @@ mu=0.0               #chemical potential
 sw_tdep=True         #switch calc. t dep conductivity or not
 temp_min=8.62e-3     #lower limit of T
 tstep=3              #range of temp step
-plot_tdf=False
+sw_tau=0             #0:constant tau, 1:w dep. tau
+plot_tdf=False       #plot tdf on display
 
+"""
+lattice parameters
+alatt: lattice length a,b,c
+deg: lattice degree alpha,beta,gamma
+if calc rhomb, monocli and tricli,please set deg=[alpha,beta,gamma](degree)
+"""
 alatt=np.array([3.6149,3.6149,3.6149])
-#alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
-#orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
-olist=[0,[1,2],3]
+#alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5])
+deg=np.array([90.,90.,90.])
 
-if brav==0:
-    Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[ 0.,0., 1.]]) #rotation matrix for dec. to primitive vector
-    k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. points 2
-    xlabel=['Z','$\Gamma$','X','Z','$\Gamma$'] #sym. points name  1
-    #k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,.5,.0],[0.,0.,0.],[.5,.5,0.]] #3 
-    #xlabel=['Z','$\Gamma$','X','M','Y','$\Gamma$','M'] #sym. points name 3
-elif brav in {1,2}:
-    #rotation matrix for dec. to primitive vector bc1 ba k brav==1, cs brav==2
-    Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[-.5,-.5, .5]] if brav==1 else
-                  [[ .5, -.5, .5],[ .5, .5, .5],[-.5,-.5, .5]])
-    k_list=([[0.,0.,.5],[0., 0., 0.],[.5, .5, -.5],[1.,0.,-.5],[0.,0.,0.]] if brav==1 else
-            [[.5,.5,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5,-.5],[0.,0.,0.]])
-    xlabel=['Z','$\Gamma$','X','M','$\Gamma$']
-elif brav==3:
-    Arot=np.array([[ .5, .5, 0.],[-.5, .5, 0.],[ 0.,0., 1.]])
-    k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,.5,0.],[0.,0.,0.]]
-    xlabel=['Z','$\Gamma$','X','M','Y','$\Gamma$']
-elif brav==4:
-    Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[-0.06457,0., 0.99979]])
-    k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]]
-    xlabel=['Z','$\Gamma$','X','Z','$\Gamma$']
-elif brav==5:
-    Arot=np.array([[-.5,0.,.5],[0.,.5,.5],[-.5,.5,0.]])
-    k_list=[[0.,0.,0.],[.5, 0., .5],[1., 0., 0.],[.5, .5, .5],[.5,.25,.75],[0.,0.,0.]]
-    xlabel=['$\Gamma$','X','$\Gamma$','L','W','$\Gamma$']
-elif brav==6:
-    Arot=np.array([[ 1., 0., 0.],[-.5, .5*np.sqrt(3.), 0.],[ 0.,0., 1.]])
-    k_list=[[0.,0.,0.],[2./3.,-1./3., 0.],[.5, 0., 0.],[0., 0., 0.],[0.,0.,.5]]
-    xlabel=['$\Gamma$','K','M','$\Gamma$','Z']
+"""
+orbital number with color plot [R,G,B] 
+if you merge some orbitals input orbital list in elements
+"""
+olist=[[0],[1,4],[2,3,5]]
+
 #----------import modules without scipy-------------
 import scipy as sc
 import scipy.linalg as sclin
@@ -95,13 +78,42 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from mpi4py import MPI
 import input_ham
-#----------------define functions-------------------
+#----------------define parameters------------------
 comm=MPI.COMM_WORLD
 size=comm.Get_size()
 rank=comm.Get_rank()
 
 ihbar=1./scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e-10 if sw_unit else 1.
 
+if brav==0:
+    Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[ 0.,0., 1.]]) #rotation matrix for dec. to primitive vector
+    k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. points 2
+    xlabel=['Z','$\Gamma$','X','Z','$\Gamma$'] #sym. points name  1
+    #k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,.5,.0],[0.,0.,0.],[.5,.5,0.]] #3 
+    #xlabel=['Z','$\Gamma$','X','M','Y','$\Gamma$','M'] #sym. points name 3
+elif brav in {1,2}: #bcc
+    Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[-.5,-.5, .5]] if brav==1 else
+                  [[ .5, -.5, .5],[ .5, .5, .5],[-.5,-.5, .5]])
+    k_list=([[0.,0.,.5],[0., 0., 0.],[.5, .5, -.5],[1.,0.,-.5],[0.,0.,0.]] if brav==1 else
+            [[.5,.5,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5,-.5],[0.,0.,0.]])
+    xlabel=['Z','$\Gamma$','X','M','$\Gamma$']
+elif brav==3: #ortho
+    Arot=np.array([[ .5, .5, 0.],[-.5, .5, 0.],[ 0.,0., 1.]])
+    k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,.5,0.],[0.,0.,0.]]
+    xlabel=['Z','$\Gamma$','X','M','Y','$\Gamma$']
+elif brav==4: #monocli
+    Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[-0.06457,0., 0.99979]])
+    k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]]
+    xlabel=['Z','$\Gamma$','X','Z','$\Gamma$']
+elif brav==5: #fcc
+    Arot=np.array([[-.5,0.,.5],[0.,.5,.5],[-.5,.5,0.]])
+    k_list=[[0.,0.,0.],[.5, 0., .5],[1., 0., 0.],[.5, .5, .5],[.5,.25,.75],[0.,0.,0.]]
+    xlabel=['$\Gamma$','X','$\Gamma$','L','W','$\Gamma$']
+elif brav==6: #hexa
+    Arot=np.array([[ 1., 0., 0.],[-.5, .5*np.sqrt(3.), 0.],[ 0.,0., 1.]])
+    k_list=[[0.,0.,0.],[2./3.,-1./3., 0.],[.5, 0., 0.],[0., 0., 0.],[0.,0.,.5]]
+    xlabel=['$\Gamma$','K','M','$\Gamma$','Z']
+#----------------define functions-------------------
 def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     """
     This function generates hamiltonian from hopping parameters.
@@ -204,13 +216,11 @@ def get_vec(k,rvec,ham_r,ndegen,avec):
     return values:
     vec: velocity in k for each bands
     """
-    #len_avec=np.sqrt((avec**2).sum(axis=1))
     ham,expk,no,nr=get_ham(k,rvec,ham_r,ndegen,out_phase=True)
     uni=sclin.eigh(ham)[1]
     vec0=np.array([-1j*ihbar*(ham_r.reshape(no*no,nr)*(r*expk)).sum(axis=1).reshape(no,no)
                     for r in rvec.T])
     vecb=np.array([(uni.conjugate().T.dot(v0).dot(uni)).diagonal() for v0 in vec0]).T
-    #vec=vecb #*len_avec
     vec=np.array([avec.T.dot(vb) for vb in vecb]).real
     return vec
 
@@ -292,13 +302,13 @@ def plot_band(eig,spl,xticks,uni,ol):
             plt.plot(spl[i:i+2],e[i:i+2],c=clist[i])
     for x in xticks[1:-1]:
         plt.axvline(x,ls='-',lw=0.25,color='black')
-    plt.ylim(emin,emax)
+    plt.ylim(eig.min()*1.1,eig.max()*1.1)
     plt.xlim(0,spl.max())
     plt.axhline(0.,ls='--',lw=0.25,color='black')
     plt.xticks(xticks,xlabel)
     plt.show()
 
-def plot_spectrum(ham,klen,xticks,mu,eta0=5.e-2,de=100,smesh=200,etamax=4.0):
+def plot_spectrum(ham,klen,xticks,mu,sw_tau,eta0=5.e-2,de=100,smesh=200,etamax=4.0):
     """
     This function plot spaghetti like spectrum.
     arguments:
@@ -327,8 +337,10 @@ def plot_spectrum(ham,klen,xticks,mu,eta0=5.e-2,de=100,smesh=200,etamax=4.0):
     no=len(ham[0])
     nk=len(ham)
 
-    #eta=w*0+eta0
-    eta=etamax*w*w/min(emax*emax,emin*emin)+eta0
+    if sw_tau==0:
+        eta=w*0+eta0
+    elif sw_tau==1:
+        eta=etamax*w*w/min(emax*emax,emin*emin)+eta0
     G=np.array([[-sclin.inv((ww+mu+et*1j)*np.identity(no)-h) for h in ham] for ww,et in zip(w,eta)])
     trG=np.array([[np.trace(gg).imag/(no*no) for gg in g] for g in G])
     sendbuf=trG.flatten()
@@ -349,9 +361,9 @@ def plot_spectrum(ham,klen,xticks,mu,eta0=5.e-2,de=100,smesh=200,etamax=4.0):
         plt.contourf(sp,w,trG,smesh)
         plt.colorbar()
         for x in xticks[1:-1]:
-            plt.axvline(x,ls='-',lw=0.25,color='black')
+            plt.axvline(x,ls='-',lw=0.25,color='white')
         plt.xlim(0,klen.max())
-        plt.axhline(0.,ls='--',lw=0.25,color='black')
+        plt.axhline(0.,ls='--',lw=0.25,color='white')
         plt.xticks(xticks,xlabel)
         plt.show()
 
@@ -706,16 +718,16 @@ def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
     fig.colorbar(cont)
     plt.show()
 
-def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,tstep,idelta=1e-3):
+def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,tstep,sw_tau,idelta=1e-3,tau0=100):
     """
     this function calculates conductivity at tau==1 from Boltzmann equation in metal
     """
-    def calc_Kn(eig,veloc,temp,mu):
+    def calc_Kn(eig,veloc,temp,mu,tau):
         dfermi=0.25*(1.-np.tanh(0.5*(eig-mu)/temp)**2)/temp
         #Kn=sum_k(v*v*(e-mu)^n*(-df/de))
-        K0=np.array([[(vk1*vk2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
-        K1=np.array([[(vk1*vk2*(eig-mu)*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
-        K2=np.array([[(vk1*vk2*(eig-mu)**2*dfermi).sum() for vk2 in veloc.T] for vk1 in veloc.T])
+        K0=np.array([[(vk1*vk2*dfermi*tau).sum() for vk2 in veloc.T] for vk1 in veloc.T])
+        K1=np.array([[(vk1*vk2*(eig-mu)*dfermi*tau).sum() for vk2 in veloc.T] for vk1 in veloc.T])
+        K2=np.array([[(vk1*vk2*(eig-mu)**2*dfermi*tau).sum() for vk2 in veloc.T] for vk1 in veloc.T])
         K0=comm.allreduce(K0,MPI.SUM)
         K1=comm.allreduce(K1,MPI.SUM)
         K2=comm.allreduce(K2,MPI.SUM)
@@ -729,15 +741,20 @@ def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,
         kb=1.
         eC=1.
         tau_u=1.
+    itau0=1./tau0
     gsp=(1.0 if with_spin else 2.0) #spin weight
     Nk,count,k_mpi=gen_klist(mesh)
     Vuc=sclin.det(avec)*1e-30 #unit is AA^3. Nk*Vuc is Volume of system.
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass
     veloc=np.array([get_vec(k,rvec,ham_r,ndegen,avec) for k in k_mpi])/mass
-    wlength=np.linspace(0,30,300)
+
+    emin=comm.allreduce(eig.min(),MPI.MIN)
+    emax=comm.allreduce(eig.max(),MPI.MAX)
+    wlength=np.linspace(emin,emax,300)
     tdf=np.array([[(v**2*tau_u/((w-eig)**2+idelta**2)).sum() for w in wlength] for v in veloc.T])
     tdf=gsp*comm.allreduce(tdf,MPI.SUM)/Nk
+
     if rank==0:
         f=open('tdf.dat','w')
         for w,d in zip(wlength,tdf.T):
@@ -759,7 +776,11 @@ def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,
         temp0=[temp_max]
     for temp in temp0:
         mu=calc_mu(eig,Nk,fill,temp)
-        K0,K1,K2=calc_Kn(eig,veloc,temp,mu)
+        if sw_tau==0:
+            tauw=eig*0+1.
+        elif sw_tau==1:
+            tauw=1./(itau0+(eig-mu)**2)
+        K0,K1,K2=calc_Kn(eig,veloc,temp,mu,tauw)
         sigma=gsp*tau_u*eC*K0/(Nk*Vuc)          #sigma=e^2K0 (A/Vm) :1eC is cannceled with eV>J
         kappa=gsp*tau_u*kb*eC*K2/(temp*Nk*Vuc)  #kappa=K2/T (W/Km) :eC(kb) appears with converting eV>J(eV>K)
         #kappa=gsp*tau_u*kb*eC*(K2-K1.dot(sclin.inv(K0).dot(K1)))/(temp*Nk*Vuc)
@@ -1194,12 +1215,12 @@ def main():
     elif option==5: #plot spectrum like band plot
         klist,spa_length,xticks=mk_klist(k_list,N,bvec)
         ham=get_hams(klist,rvec,ham_r,ndegen,no)
-        plot_spectrum(ham,spa_length,xticks,mu,eta,wmesh)
+        plot_spectrum(ham,spa_length,xticks,mu,sw_tau,eta,wmesh)
     elif option==6: #plot spectrum at E=EF
         if rank==0:
             plot_FSsp(ham,mu,X,Y,eta)
     elif option==7: #plot conductivity
-        get_conductivity(sw_tdep,FSmesh,rvec,ham_r,ndegen,avec,fill,temp,temp_min,tstep)
+        get_conductivity(sw_tdep,FSmesh,rvec,ham_r,ndegen,avec,fill,temp,temp_min,tstep,sw_tau)
     elif option==8: #plot dos
         plot_dos(FSmesh,rvec,ham_r,ndegen,mu,no,eta,wmesh)
     elif option==9: #plot carrier number
