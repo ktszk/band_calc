@@ -2,7 +2,7 @@
 #-*- coding:utf-8 -*-
 import numpy as np
 
-fname='Cu' #hamiltonian file name
+fname='Cu'           #hamiltonian file name
 sw_inp=2             #input hamiltonian format
 """
 sw_inp: switch input hamiltonian's format
@@ -30,29 +30,29 @@ option: switch calculation modes
 
 N=200                #kmesh btween symmetry points
 FSmesh=40            #kmesh for option in {1,2,3,5,6}
-wmesh=200
-(emin,emax)=(-3,3)
+wmesh=200            #w-mesh for dos and spectrum
+(emin,emax)=(-3,3)   #max and min energy
 eta=1.0e-3           #eta for green function
-de=1.e-4
-kz=np.pi*0.
-sw_dec_axis=True    #transform Cartesian axis
+de=1.e-4             #delta for spectrum
+kz=np.pi*0.          #kz for option 1 and 6
+sw_dec_axis=False    #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
 with_spin=False      #use only with soc hamiltonian
-mass=1.0             #effective mass
+mass=1.0             #effective mass (reduce band width)
 sw_unit=True
 
-sw_calc_mu =True
-fill=5.50
-brav=5 #0:sc, 1,2: bc, 3: orthorhombic, 4: monoclinic 5: fcc
-#temp=1.0e-9
-temp=8.62e-3 #~100K if sw_tdep True upper limit of T
-mu=0.0              #chemical potential
+sw_calc_mu =True     #switch calc mu or not
+fill=5.50            #band filling
+brav=5               #0:sc, 1,2: bc, 3: orthorhombic, 4: monoclinic 5: fcc 6: hexa
+temp=3*8.62e-3       #temp if sw_tdep True upper limit of T 100K~8.62e-3eV
+mu=0.0               #chemical potential
 
-sw_tdep=True #switch calc. t dep conductivity or not
-temp_min=8.62e-5 #lower limit of T
-tstep=3 #range of temp step
+sw_tdep=True         #switch calc. t dep conductivity or not
+temp_min=8.62e-3     #lower limit of T
+tstep=3              #range of temp step
+plot_tdf=False
 
-alatt=np.array([6.83,6.83,6.83])
+alatt=np.array([3.6149,3.6149,3.6149])
 #alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5]) #Bravais lattice parameter a,b,c
 #orbital number with color plot [R,G,B] if you merge some orbitals input orbital list in elements
 olist=[0,[1,2],3]
@@ -69,19 +69,23 @@ elif brav in {1,2}:
                   [[ .5, -.5, .5],[ .5, .5, .5],[-.5,-.5, .5]])
     k_list=([[0.,0.,.5],[0., 0., 0.],[.5, .5, -.5],[1.,0.,-.5],[0.,0.,0.]] if brav==1 else
             [[.5,.5,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5,-.5],[0.,0.,0.]])
-    xlabel=['Z','$\Gamma$','X','M','$\Gamma$'] #sym. points name 2 
+    xlabel=['Z','$\Gamma$','X','M','$\Gamma$']
 elif brav==3:
     Arot=np.array([[ .5, .5, 0.],[-.5, .5, 0.],[ 0.,0., 1.]])
-    k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,.5,0.],[0.,0.,0.]]  #4 
-    xlabel=['Z','$\Gamma$','X','M','Y','$\Gamma$'] #4
+    k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,.5,0.],[0.,0.,0.]]
+    xlabel=['Z','$\Gamma$','X','M','Y','$\Gamma$']
 elif brav==4:
-    Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[-0.06457,0., 0.99979]]) #rotation matrix for dec. to primitive vector
-    k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. points 2
-    xlabel=['Z','$\Gamma$','X','Z','$\Gamma$'] #sym. points name  1
+    Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[-0.06457,0., 0.99979]])
+    k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]]
+    xlabel=['Z','$\Gamma$','X','Z','$\Gamma$']
 elif brav==5:
     Arot=np.array([[-.5,0.,.5],[0.,.5,.5],[-.5,.5,0.]])
-    k_list=[[0.,0.,0.],[.5, 0., .5],[1., 0., 0.],[.5, .5, .5],[.5,.25,.75],[0.,0.,0.]] #coordinate of sym. points
-    xlabel=['$\Gamma$','X','$\Gamma$','L','W','$\Gamma$'] #sym. points name
+    k_list=[[0.,0.,0.],[.5, 0., .5],[1., 0., 0.],[.5, .5, .5],[.5,.25,.75],[0.,0.,0.]]
+    xlabel=['$\Gamma$','X','$\Gamma$','L','W','$\Gamma$']
+elif brav==6:
+    Arot=np.array([[ 1., 0., 0.],[-.5, .5*np.sqrt(3.), 0.],[ 0.,0., 1.]])
+    k_list=[[0.,0.,0.],[2./3.,-1./3., 0.],[.5, 0., 0.],[0., 0., 0.],[0.,0.,.5]]
+    xlabel=['$\Gamma$','K','M','$\Gamma$','Z']
 #----------import modules without scipy-------------
 import scipy as sc
 import scipy.linalg as sclin
@@ -95,6 +99,8 @@ import input_ham
 comm=MPI.COMM_WORLD
 size=comm.Get_size()
 rank=comm.Get_rank()
+
+ihbar=1./scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e-10 if sw_unit else 1.
 
 def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     """
@@ -143,9 +149,9 @@ def gen_klist(mesh,k_sw=True,dim=None):
     k_mpi=recvbuf.reshape(count[rank]//3,3)
     return (Nk,count//3,k_mpi)
 
-def get_mu(fill,rvec,ham_r,ndegen,temp,mesh=40):
+def get_mu(fill,rvec,ham_r,ndegen,temp=1e-6,mesh=40):
     """
-    This function calculates chemical potential.
+    This function calculates initial chemical potential.
     arguments:
     fill: band filling (number of particles in band)
     rvec: real space coodinate for hoppings
@@ -160,31 +166,31 @@ def get_mu(fill,rvec,ham_r,ndegen,temp,mesh=40):
     Nk,count,k_mpi=gen_klist(mesh)
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     e_mpi=np.array([sclin.eigvalsh(h) for h in ham]).T
-    mu=calc_mu(e_mpi,count,Nk,temp)
+    mu=calc_mu(e_mpi,Nk,fill,temp)
     if rank==0:
         print('chemical potential = %6.3f'%mu)
     return mu
 
-def calc_mu(e_mpi,count,Nk,temp):
-    sendbuf=e_mpi.flatten()
-    if rank==0:
-        no=sendbuf.size//count[rank]
-        count=count*no
-        recvbuf=np.empty(count.sum(),dtype='f8')
-        displ=np.array([count[:i].sum() for i in range(size)])
-    else:
-        recvbuf=None
-        displ=None
-    comm.Bcast(count,root=0)
-    comm.Gatherv(sendbuf,[recvbuf,count,displ,MPI.DOUBLE],root=0)
-    if rank==0:
-        eig=recvbuf.reshape(Nk,no)
-        f=lambda mu: 2.*fill*Nk+(np.tanh(0.5*(eig-mu)/temp)-1.).sum()
-        mu=scopt.brentq(f,eig.min(),eig.max())
-        #mu=scopt.newton(f,0.5*(eig.min()+eig.max()))
-    else:
-        mu=None
-    mu=comm.bcast(mu,root=0)
+def calc_mu(e_mpi,Nk,fill,temp):
+    """
+    This function obtains chemical potential from energy.
+    argments:
+    e_mpi: energy of each mpi process.
+    Nk: Number of k-points
+    fill: band filling (number of particles in band) 
+    temp: temperature
+    """
+
+    Nall=(2*fill-len(e_mpi))*Nk #calculate (2*filling-Nband)*Nk
+    def func(mu): #calculate f(x)=Nall-sum_e tanh((e-mu)/2kbT)
+        sum_tanh=np.tanh(0.5*(e_mpi-mu)/temp).sum()
+        sum_tanh=comm.allreduce(sum_tanh,MPI.SUM)
+        return(Nall+sum_tanh)
+    emax=comm.allreduce(e_mpi.max(),MPI.MAX)
+    emin=comm.allreduce(e_mpi.min(),MPI.MIN)
+    #obtain mu that f(mu)=0
+    mu=scopt.brentq(func,emin,emax)
+    #mu=scopt.newton(func,0.5*(emin+emax))
     return mu
 
 def get_vec(k,rvec,ham_r,ndegen,avec):
@@ -198,10 +204,6 @@ def get_vec(k,rvec,ham_r,ndegen,avec):
     return values:
     vec: velocity in k for each bands
     """
-    if sw_unit:
-        ihbar=1./scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e-10
-    else:
-        ihbar=1.
     #len_avec=np.sqrt((avec**2).sum(axis=1))
     ham,expk,no,nr=get_ham(k,rvec,ham_r,ndegen,out_phase=True)
     uni=sclin.eigh(ham)[1]
@@ -485,7 +487,8 @@ def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,avec,surface_opt=0):
                             v_weight.append(absv)
                             vc.append(ave_verts)
                     if(surface_opt==2):
-                        print('%.3e %.3e %.3e'%tuple(avev/len(verts[faces])))
+                        aveabsv=np.sqrt(((abs(avev)/len(verts[faces]))**2).sum())
+                        print('%.3e %.3e %.3e'%tuple(avev/len(verts[faces]))+' %.3e'%aveabsv)
                         nk=nk+len(verts[faces])
                         avev_all=avev_all+avev
                     v_verts.extend(verts[faces])
@@ -524,50 +527,76 @@ def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,avec,surface_opt=0):
         elif brav==4:
             da=0.0088435
             dc=0.12914
-            BZtops=[[[(1.-da)*np.pi,(1.-da)*np.pi],[-np.pi,np.pi],[np.pi,np.pi]],[[-(1.-da)*np.pi,-(1.-da)*np.pi],[-np.pi,np.pi],[-np.pi,-np.pi]],
-                    [[(1-da)*np.pi,(1.-da)*np.pi],[-np.pi,np.pi],[-np.pi,-np.pi]],[[-(1.-da)*np.pi,-(1.-da)*np.pi],[-np.pi,np.pi],[np.pi,np.pi]],
+            BZtops=[[[(1.-da)*np.pi,(1.-da)*np.pi],[-np.pi,np.pi],[np.pi,np.pi]],
+                    [[-(1.-da)*np.pi,-(1.-da)*np.pi],[-np.pi,np.pi],[-np.pi,-np.pi]],
+                    [[(1-da)*np.pi,(1.-da)*np.pi],[-np.pi,np.pi],[-np.pi,-np.pi]],
+                    [[-(1.-da)*np.pi,-(1.-da)*np.pi],[-np.pi,np.pi],[np.pi,np.pi]],
 
-                    [[-(1.-da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[np.pi,np.pi]],[[-(1.-da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[-np.pi,-np.pi]],
-                    [[-(1.-da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[np.pi,np.pi]],[[-(1.-da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[-np.pi,-np.pi]],
+                    [[-(1.-da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[np.pi,np.pi]],
+                    [[-(1.-da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[-np.pi,-np.pi]],
+                    [[-(1.-da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[np.pi,np.pi]],
+                    [[-(1.-da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[-np.pi,-np.pi]],
 
-                    [[(1.+da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[-(1.-dc)*np.pi,np.pi]],[[(1.+da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[-(1.-dc)*np.pi,-np.pi]],
-                    [[(1.+da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[-(1.-dc)*np.pi,np.pi]],[[(1.+da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[-(1.-dc)*np.pi,-np.pi]],
+                    [[(1.+da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[-(1.-dc)*np.pi,np.pi]],
+                    [[(1.+da)*np.pi,(1.-da)*np.pi],[np.pi,np.pi],[-(1.-dc)*np.pi,-np.pi]],
+                    [[(1.+da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[-(1.-dc)*np.pi,np.pi]],
+                    [[(1.+da)*np.pi,(1.-da)*np.pi],[-np.pi,-np.pi],[-(1.-dc)*np.pi,-np.pi]],
                     [[(1.+da)*np.pi,(1.+da)*np.pi],[-np.pi,np.pi],[-(1.-dc)*np.pi,-(1.-dc)*np.pi]],
 
-                    [[-(1.+da)*np.pi,-(1.-da)*np.pi],[np.pi,np.pi],[(1.-dc)*np.pi,-np.pi]],[[-(1.+da)*np.pi,-(1.-da)*np.pi],[np.pi,np.pi],[(1.-dc)*np.pi,np.pi]],
-                    [[-(1.+da)*np.pi,-(1.-da)*np.pi],[-np.pi,-np.pi],[(1.-dc)*np.pi,-np.pi]],[[-(1.+da)*np.pi,-(1.-da)*np.pi],[-np.pi,-np.pi],[(1.-dc)*np.pi,np.pi]],
+                    [[-(1.+da)*np.pi,-(1.-da)*np.pi],[np.pi,np.pi],[(1.-dc)*np.pi,-np.pi]],
+                    [[-(1.+da)*np.pi,-(1.-da)*np.pi],[np.pi,np.pi],[(1.-dc)*np.pi,np.pi]],
+                    [[-(1.+da)*np.pi,-(1.-da)*np.pi],[-np.pi,-np.pi],[(1.-dc)*np.pi,-np.pi]],
+                    [[-(1.+da)*np.pi,-(1.-da)*np.pi],[-np.pi,-np.pi],[(1.-dc)*np.pi,np.pi]],
                     [[-(1.+da)*np.pi,-(1.+da)*np.pi],[-np.pi,np.pi],[(1.-dc)*np.pi,(1.-dc)*np.pi]]]
         elif brav in {1,2}:
             cpa=alatt[2]/alatt[0]
             icpa=1./cpa
             ep=icpa**2
             #top plain
-            BZtops=[[[-(1.-ep)*np.pi,(1.-ep)*np.pi],[(1-ep)*np.pi,(1-ep)*np.pi],[np.pi,np.pi]],[[-(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,-(1.-ep)*np.pi],[np.pi,np.pi]],
-                    [[(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[np.pi,np.pi]],[[-(1.-ep)*np.pi,-(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[np.pi,np.pi]],
+            BZtops=[[[-(1.-ep)*np.pi,(1.-ep)*np.pi],[(1-ep)*np.pi,(1-ep)*np.pi],[np.pi,np.pi]],
+                    [[-(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,-(1.-ep)*np.pi],[np.pi,np.pi]],
+                    [[(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[np.pi,np.pi]],
+                    [[-(1.-ep)*np.pi,-(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[np.pi,np.pi]],
                     #bottom plain
-                    [[-(1.-ep)*np.pi,(1.-ep)*np.pi],[(1-ep)*np.pi,(1-ep)*np.pi],[-np.pi,-np.pi]],[[-(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,-(1.-ep)*np.pi],[-np.pi,-np.pi]],
-                    [[(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[-np.pi,-np.pi]],[[-(1.-ep)*np.pi,-(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[-np.pi,-np.pi]],
+                    [[-(1.-ep)*np.pi,(1.-ep)*np.pi],[(1-ep)*np.pi,(1-ep)*np.pi],[-np.pi,-np.pi]],
+                    [[-(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,-(1.-ep)*np.pi],[-np.pi,-np.pi]],
+                    [[(1.-ep)*np.pi,(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[-np.pi,-np.pi]],
+                    [[-(1.-ep)*np.pi,-(1.-ep)*np.pi],[-(1.-ep)*np.pi,(1.-ep)*np.pi],[-np.pi,-np.pi]],
 
-                    [[(1.-ep)*np.pi,np.pi],[(1.-ep)*np.pi,np.pi],[np.pi,.5*np.pi]],[[(1.-ep)*np.pi,np.pi],[-(1.-ep)*np.pi,-np.pi],[np.pi,.5*np.pi]],
-                    [[-(1.-ep)*np.pi,-np.pi],[(1.-ep)*np.pi,np.pi],[np.pi,.5*np.pi]],[[-(1.-ep)*np.pi,-np.pi],[-(1.-ep)*np.pi,-np.pi],[np.pi,.5*np.pi]],
+                    [[(1.-ep)*np.pi,np.pi],[(1.-ep)*np.pi,np.pi],[np.pi,.5*np.pi]],
+                    [[(1.-ep)*np.pi,np.pi],[-(1.-ep)*np.pi,-np.pi],[np.pi,.5*np.pi]],
+                    [[-(1.-ep)*np.pi,-np.pi],[(1.-ep)*np.pi,np.pi],[np.pi,.5*np.pi]],
+                    [[-(1.-ep)*np.pi,-np.pi],[-(1.-ep)*np.pi,-np.pi],[np.pi,.5*np.pi]],
 
-                    [[(1.-ep)*np.pi,np.pi],[(1.-ep)*np.pi,np.pi],[-np.pi,-.5*np.pi]],[[(1.-ep)*np.pi,np.pi],[-(1.-ep)*np.pi,-np.pi],[-np.pi,-.5*np.pi]],
-                    [[-(1.-ep)*np.pi,-np.pi],[(1.-ep)*np.pi,np.pi],[-np.pi,-.5*np.pi]],[[-(1.-ep)*np.pi,-np.pi],[-(1.-ep)*np.pi,-np.pi],[-np.pi,-.5*np.pi]],
+                    [[(1.-ep)*np.pi,np.pi],[(1.-ep)*np.pi,np.pi],[-np.pi,-.5*np.pi]],
+                    [[(1.-ep)*np.pi,np.pi],[-(1.-ep)*np.pi,-np.pi],[-np.pi,-.5*np.pi]],
+                    [[-(1.-ep)*np.pi,-np.pi],[(1.-ep)*np.pi,np.pi],[-np.pi,-.5*np.pi]],
+                    [[-(1.-ep)*np.pi,-np.pi],[-(1.-ep)*np.pi,-np.pi],[-np.pi,-.5*np.pi]],
 
-                    [[np.pi,(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[.5*np.pi,0.]],[[np.pi,(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[.5*np.pi,0.]],
-                    [[np.pi,(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[-.5*np.pi,0.]],[[np.pi,(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[-.5*np.pi,0.]],
+                    [[np.pi,(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[.5*np.pi,0.]],
+                    [[np.pi,(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[.5*np.pi,0.]],
+                    [[np.pi,(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[-.5*np.pi,0.]],
+                    [[np.pi,(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[-.5*np.pi,0.]],
 
-                    [[np.pi,(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[.5*np.pi,0.]],[[np.pi,(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[.5*np.pi,0.]],
-                    [[np.pi,(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[-.5*np.pi,0.]],[[np.pi,(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[-.5*np.pi,0.]],
+                    [[np.pi,(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[.5*np.pi,0.]],
+                    [[np.pi,(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[.5*np.pi,0.]],
+                    [[np.pi,(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[-.5*np.pi,0.]],
+                    [[np.pi,(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[-.5*np.pi,0.]],
 
-                    [[-np.pi,-(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[.5*np.pi,0.]],[[-np.pi,-(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[.5*np.pi,0.]],
-                    [[-np.pi,-(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[-.5*np.pi,0.]],[[-np.pi,-(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[-.5*np.pi,0.]],
+                    [[-np.pi,-(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[.5*np.pi,0.]],
+                    [[-np.pi,-(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[.5*np.pi,0.]],
+                    [[-np.pi,-(1.-ep)*np.pi],[np.pi,(1.+ep)*np.pi],[-.5*np.pi,0.]],
+                    [[-np.pi,-(1.+ep)*np.pi],[np.pi,(1.-ep)*np.pi],[-.5*np.pi,0.]],
 
-                    [[-np.pi,-(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[.5*np.pi,0.]],[[-np.pi,-(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[.5*np.pi,0.]],
-                    [[-np.pi,-(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[-.5*np.pi,0.]],[[-np.pi,-(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[-.5*np.pi,0.]],
+                    [[-np.pi,-(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[.5*np.pi,0.]],
+                    [[-np.pi,-(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[.5*np.pi,0.]],
+                    [[-np.pi,-(1.-ep)*np.pi],[-np.pi,-(1.+ep)*np.pi],[-.5*np.pi,0.]],
+                    [[-np.pi,-(1.+ep)*np.pi],[-np.pi,-(1.-ep)*np.pi],[-.5*np.pi,0.]],
 
-                    [[(1.-ep)*np.pi,-(1.-ep)*np.pi],[(1.+ep)*np.pi,(1.+ep)*np.pi],[0.,0.]],[[(1.+ep)*np.pi,(1.+ep)*np.pi],[(1.-ep)*np.pi,-(1.-ep)*np.pi],[0.,0.]],
-                    [[(1.-ep)*np.pi,-(1.-ep)*np.pi],[-(1.+ep)*np.pi,-(1.+ep)*np.pi],[0.,0.]],[[-(1.+ep)*np.pi,-(1.+ep)*np.pi],[(1.-ep)*np.pi,-(1.-ep)*np.pi],[0.,0.]]]
+                    [[(1.-ep)*np.pi,-(1.-ep)*np.pi],[(1.+ep)*np.pi,(1.+ep)*np.pi],[0.,0.]],
+                    [[(1.+ep)*np.pi,(1.+ep)*np.pi],[(1.-ep)*np.pi,-(1.-ep)*np.pi],[0.,0.]],
+                    [[(1.-ep)*np.pi,-(1.-ep)*np.pi],[-(1.+ep)*np.pi,-(1.+ep)*np.pi],[0.,0.]],
+                    [[-(1.+ep)*np.pi,-(1.+ep)*np.pi],[(1.-ep)*np.pi,-(1.-ep)*np.pi],[0.,0.]]]
         if brav in {0,1,2,4}:
             for tops in BZtops:
                 ax.plot(tops[0],tops[1],tops[2],ls='-',lw=1.,color='black')
@@ -677,7 +706,7 @@ def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
     fig.colorbar(cont)
     plt.show()
 
-def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,tstep):
+def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,tstep,idelta=1e-3):
     """
     this function calculates conductivity at tau==1 from Boltzmann equation in metal
     """
@@ -706,12 +735,30 @@ def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass
     veloc=np.array([get_vec(k,rvec,ham_r,ndegen,avec) for k in k_mpi])/mass
+    wlength=np.linspace(0,30,300)
+    tdf=np.array([[(v**2*tau_u/((w-eig)**2+idelta**2)).sum() for w in wlength] for v in veloc.T])
+    tdf=gsp*comm.allreduce(tdf,MPI.SUM)/Nk
+    if rank==0:
+        f=open('tdf.dat','w')
+        for w,d in zip(wlength,tdf.T):
+            f.write('%e %e %e %e \n'%(w,d[0],d[1],d[2]))
+        f.close()
+        if plot_tdf:
+            fig=plt.figure()
+            ax=fig.add_subplot(211)
+            for i,td in enumerate(tdf):
+                if i==2:
+                    ax1=fig.add_subplot(212)
+                    ax1.plot(wlength,td)
+                else:
+                    ax.plot(wlength,td)
+            plt.show()
     if sw_tdep:
         temp0=np.linspace(temp_min,temp_max,tstep)
     else:
         temp0=[temp_max]
     for temp in temp0:
-        mu=calc_mu(eig,count,Nk,temp)
+        mu=calc_mu(eig,Nk,fill,temp)
         K0,K1,K2=calc_Kn(eig,veloc,temp,mu)
         sigma=gsp*tau_u*eC*K0/(Nk*Vuc)          #sigma=e^2K0 (A/Vm) :1eC is cannceled with eV>J
         kappa=gsp*tau_u*kb*eC*K2/(temp*Nk*Vuc)  #kappa=K2/T (W/Km) :eC(kb) appears with converting eV>J(eV>K)
@@ -1090,7 +1137,7 @@ def main():
             mu=get_mu(fill,rvec,ham_r,ndegen,temp)
 
     if sw_dec_axis:
-        rvec1=np.array([Arot.T.dot(r) for r in rvec])
+        rvec1=Arot.T.dot(rvec.T).T
         rvec=rvec1
         if brav in {1,2}:
             rvec[:,2]=rvec[:,2]*2.
@@ -1104,7 +1151,14 @@ def main():
     else:
         avec=alatt*Arot
     bvec=sclin.inv(avec).T
-
+    if rank==0:
+        print(avec)
+        print(2*np.pi*bvec)
+        #arvec=avec.T.dot(rvec.T).T
+        #fig=plt.figure()
+        #ax=fig.add_subplot(111,projection='3d')
+        #ax.scatter(arvec[:,0],arvec[:,1],arvec[:,2])
+        #plt.show()
     if option==0: #band plot
         klist,spa_length,xticks=mk_klist(k_list,N,bvec)
         ham=get_hams(klist,rvec,ham_r,ndegen,no)
