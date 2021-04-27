@@ -12,7 +12,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=5
+option=7
 """
 option: switch calculation modes
  0: band plot
@@ -51,7 +51,6 @@ sw_tdep=True         #switch calc. t dep conductivity or not
 temp_min=8.62e-3     #lower limit of T
 tstep=3              #range of temp step
 sw_tau=0             #0:constant tau, 1:w dep. tau
-plot_tdf=False       #plot tdf on display
 
 """
 lattice parameters
@@ -102,7 +101,7 @@ elif brav==3: #ortho
     k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,.5,0.],[0.,0.,0.]]
     xlabel=['Z','$\Gamma$','X','M','Y','$\Gamma$']
 elif brav==4: #monocli
-    Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[-0.06457,0., 0.99979]])
+    Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[np.cos(deg[1]),0., np.sin(deg[1])]])
     k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]]
     xlabel=['Z','$\Gamma$','X','Z','$\Gamma$']
 elif brav==5: #fcc
@@ -112,6 +111,14 @@ elif brav==5: #fcc
 elif brav==6: #hexa
     Arot=np.array([[ 1., 0., 0.],[-.5, .5*np.sqrt(3.), 0.],[ 0.,0., 1.]])
     k_list=[[0.,0.,0.],[2./3.,-1./3., 0.],[.5, 0., 0.],[0., 0., 0.],[0.,0.,.5]]
+    xlabel=['$\Gamma$','K','M','$\Gamma$','Z']
+elif brav==7: #trigonal
+    cosg=np.cos(np.pi*deg[2]/180.)
+    tx=np.sqrt((1.-cosg)*.5)
+    ty=np.sqrt((1.-cosg)/6.)
+    tz=np.sqrt((1.+2*cosg)/3.)
+    Arot=np.array([[tx,-ty,tz],[0,2*ty,tz],[-tx,-ty,tz]])
+    k_list=[[0.,0.,0.],[.5,0.,.5],[.5,0.,0.],[0.,0.,0.],[.5,.5,.5]]
     xlabel=['$\Gamma$','K','M','$\Gamma$','Z']
 #----------------define functions-------------------
 def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
@@ -752,24 +759,19 @@ def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,
     emin=comm.allreduce(eig.min(),MPI.MIN)
     emax=comm.allreduce(eig.max(),MPI.MAX)
     wlength=np.linspace(emin,emax,300)
-    tdf=np.array([[(v**2*tau_u/((w-eig)**2+idelta**2)).sum() for w in wlength] for v in veloc.T])
+    tdf=np.array([[[(v1*v2*tau_u/((w-eig)**2+idelta**2)).sum() for w in wlength]
+                   for v1 in veloc.T] for v2 in veloc.T])
     tdf=gsp*comm.allreduce(tdf,MPI.SUM)/Nk
 
     if rank==0:
         f=open('tdf.dat','w')
-        for w,d in zip(wlength,tdf.T):
-            f.write('%e %e %e %e \n'%(w,d[0],d[1],d[2]))
+        for w,td in zip(wlength,tdf.T):
+            f.write('%7.3f '%w)
+            for i,d in enumerate(td):
+                for dd in d[:i+1]:
+                    f.write('%10.3e '%(dd))
+            f.write('\n')
         f.close()
-        if plot_tdf:
-            fig=plt.figure()
-            ax=fig.add_subplot(211)
-            for i,td in enumerate(tdf):
-                if i==2:
-                    ax1=fig.add_subplot(212)
-                    ax1.plot(wlength,td)
-                else:
-                    ax.plot(wlength,td)
-            plt.show()
     if sw_tdep:
         temp0=np.linspace(temp_min,temp_max,tstep)
     else:
@@ -782,10 +784,10 @@ def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,
             tauw=1./(itau0+(eig-mu)**2)
         K0,K1,K2=calc_Kn(eig,veloc,temp,mu,tauw)
         sigma=gsp*tau_u*eC*K0/(Nk*Vuc)          #sigma=e^2K0 (A/Vm) :1eC is cannceled with eV>J
-        kappa=gsp*tau_u*kb*eC*K2/(temp*Nk*Vuc)  #kappa=K2/T (W/Km) :eC(kb) appears with converting eV>J(eV>K)
-        #kappa=gsp*tau_u*kb*eC*(K2-K1.dot(sclin.inv(K0).dot(K1)))/(temp*Nk*Vuc)
+        #kappa=gsp*tau_u*kb*eC*K2/(temp*Nk*Vuc)  #kappa=K2/T (W/Km) :eC(kb) appears with converting eV>J(eV>K)
+        kappa=gsp*tau_u*kb*eC*(K2-K1.dot(sclin.inv(K0).dot(K1)))/(temp*Nk*Vuc)
         sigmaS=gsp*tau_u*kb*eC*K1/(temp*Nk*Vuc) #sigmaS=eK1/T (A/mK)
-        Seebeck=kb*sclin.inv(K0).dot(K1)/temp   #S=K0^(-1)K1/eT (V/K) :kb appears with converting eV>K
+        Seebeck=-kb*sclin.inv(K0).dot(K1)/temp   #S=K0^(-1)K1/eT (V/K) :kb appears with converting eV>K
         Pertier=K1.dot(sclin.inv(K0))           #pi=K1K0^(-1)/e (V:J/C) :eC is cannceled with eV>J
         PF=sigmaS.dot(Seebeck)
 
@@ -793,6 +795,8 @@ def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,
             '''
             sigma,kappa,sigmaS consistent with boltzwann in cartesian coordinate.
             but S is sign inverted. should we multiply by a minus?
+            Lorenz number of free electron is 2.44e-8(WOhmK^-2)
+            O(L)~1e-8
             '''
             print('temperature = %4.0d[K]'%int(temp/kb))
             print('mu = %7.3f'%mu)
