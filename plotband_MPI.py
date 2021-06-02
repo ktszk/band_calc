@@ -12,7 +12,7 @@ sw_inp: switch input hamiltonian's format
 else: Hopping.dat file (ecalj hopping file)
 """
 
-option=7
+option=0
 """
 option: switch calculation modes
  0: band plot
@@ -279,12 +279,12 @@ def mk_klist(k_list,N,bvec):
         tmp=2.*np.pi*np.linspace(ks,ke,N)
         tmp2=np.linspace(0,dkv_length,N)+maxsplen
         maxsplen=tmp2.max()
-        xticks=xticks+[tmp2[0]]
-        klist=klist+list(tmp[:-1])
-        splen=splen+list(tmp2[:-1])
-    klist=klist+[2*np.pi*np.array(k_list[-1])]
-    splen=splen+[maxsplen+dkv_length/N]
-    xticks=xticks+[splen[-1]]
+        xticks+=[tmp2[0]]
+        klist+=list(tmp[:-1])
+        splen+=list(tmp2[:-1])
+    klist+=[2*np.pi*np.array(k_list[-1])]
+    splen+=[maxsplen+dkv_length/N]
+    xticks+=[splen[-1]]
     return np.array(klist),np.array(splen),xticks
 
 def plot_band(eig,spl,xticks,uni,ol):
@@ -1134,7 +1134,7 @@ def get_hams(klist,rvec,ham_r,ndegen,no):
     ham_mpi=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     sendbuf=ham_mpi.flatten()
     if rank==0:
-        count=count*no*no
+        count*=no*no
         recvbuf=np.empty(count.sum(),dtype='c16')
         displ=np.array([count[:i].sum() for i in range(size)])
     else:
@@ -1165,11 +1165,11 @@ def main():
         rvec1=Arot.T.dot(rvec.T).T
         rvec=rvec1
         if brav in {1,2}:
-            rvec[:,2]=rvec[:,2]*2.
+            rvec[:,2]*=2.
             avec=alatt*np.eye(3)
-            avec[:,2]=avec[:,2]*.5
+            avec[:,2]*=.5
         elif brav==5:
-            rvec=rvec*2.
+            rvec*=2.
             avec=(alatt*np.eye(3))*.5
         else:
             avec=alatt*np.eye(3)
