@@ -29,13 +29,13 @@ option: switch calculation modes
 """
 
 N=200                #kmesh btween symmetry points
-FSmesh=40            #kmesh for option in {1,2,3,5,6}
+FSmesh=80            #kmesh for option in {1,2,3,5,6}
 wmesh=400            #w-mesh for dos and spectrum
 
 eta=2.0e-2           #eta for green function
 de=1.e-4             #delta for spectrum
 kz=np.pi*0.          #kz for option 1 and 6
-sw_dec_axis=False    #transform Cartesian axis
+sw_dec_axis=True     #transform Cartesian axis
 sw_color=True        #plot band or FS with orbital weight
 with_spin=False      #use only with soc hamiltonian
 mass=1.0             #effective mass (reduce band width)
@@ -287,6 +287,24 @@ def mk_klist(k_list,N,bvec):
     xticks+=[splen[-1]]
     return np.array(klist),np.array(splen),xticks
 
+def get_BZ_edges(bvec):
+    import scipy.spatial as ssp
+    r0=range(-1,2)
+    x,y,z=np.meshgrid(r0,r0,r0)
+    ini_points=np.array([x.ravel(),y.ravel(),z.ravel()]).T
+    zero=np.where(abs(ini_points).sum(axis=1)==0)[0]
+   
+    points=ini_points.dot(bvec)
+    voro=ssp.Voronoi(points)
+    voro_points=voro.regions[voro.point_region[zero][0]]
+    vp=set(voro_points)
+    BZ_faces=[]
+    for i in voro.ridge_vertices:
+        if -1 not in i:
+            if len(set(i)&vp)==len(i):
+                BZ_faces.append(voro.vertices[i])
+    return BZ_faces
+
 def plot_band(eig,spl,xticks,uni,ol):
     """
     This function plot spaghetti.
@@ -436,7 +454,7 @@ def mk_kf(mesh,rvec,ham_r,ndegen,mu,kz=0):
         fsband=None
     return v2,fsband
 
-def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,avec,surface_opt=0):
+def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,avec,BZ_faces,surface_opt=0):
     """
     This function plot 3D Fermi Surface
     argument:
@@ -521,7 +539,7 @@ def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,avec,surface_opt=0):
             clmax=v_weight.max()
             clmin=v_weight.min()
             clist=(v_weight-clmin)/(clmax-clmin)
-            tri=Poly3DCollection(v_verts,facecolors=cm.jet(clist),lw=0)
+            tri=Poly3DCollection(v_verts,facecolors=cm.jet(clist),edigecolor=(0,0,0,0),lw=0)
             ax.add_collection3d(tri)
             fs=ax.scatter(vc[:,0],vc[:,1],vc[:,2],c=v_weight,cmap=cm.jet,s=0.1)
             plt.colorbar(fs,format='%.2e')
@@ -533,6 +551,9 @@ def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,avec,surface_opt=0):
         ax.set_yticks([])
         ax.set_zticks([])
         plt.tight_layout()
+        #for face in BZ_faces:
+        #    BZ=Poly3DCollection(face,facecolors=(0,0,0,0),lw=2,edgecolor='k')
+        #    ax.add_collection3d(BZ)
 
         if brav==0:
             BZtops=[[[-np.pi,np.pi],[np.pi,np.pi],[np.pi,np.pi]],[[-np.pi,np.pi],[np.pi,np.pi],[-np.pi,-np.pi]],
@@ -1160,7 +1181,9 @@ def main():
             mu
         except NameError:
             mu=get_mu(fill,rvec,ham_r,ndegen,temp)
-
+    if option in {2,3,4}:
+        bvec=2*np.pi*sclin.inv(alatt*Arot).T
+        BZ_faces=get_BZ_edges(bvec)
     if sw_dec_axis:
         rvec1=Arot.T.dot(rvec.T).T
         rvec=rvec1
@@ -1205,11 +1228,11 @@ def main():
                 plot_FS_cont(eig,X,Y)
     elif option==2: #write 3D Fermi surfaces
         if sw_color: #plot orbital weight on 3D Ferrmi surfaces
-            gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu,avec,1)
+            gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu,avec,BZ_faces,1)
         else:
-            gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu,avec)
+            gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu,avec,BZ_faces)
     elif option==3: #plot size of Fermi velocity on 3D Fermi surfacea
-        gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu,avec,2)
+        gen_3d_fs_plot(FSmesh,rvec,ham_r,ndegen,mu,avec,BZ_faces,2)
     elif option==4: #write Fermi velocity on 2D Fermi surfaces
         klist,blist=mk_kf(FSmesh,rvec,ham_r,ndegen,mu,kz)
         if rank==0:
