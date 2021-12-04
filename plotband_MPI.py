@@ -2,7 +2,7 @@
 #-*- coding:utf-8 -*-
 import numpy as np
 
-fname='Cu'           #hamiltonian file name
+fname='Pb'           #hamiltonian file name
 sw_inp=2             #input hamiltonian format
 """
 sw_inp: switch input hamiltonian's format
@@ -11,8 +11,9 @@ sw_inp: switch input hamiltonian's format
 2: {case}_hr.dat file (wannier90 default hopping file)
 else: Hopping.dat file (ecalj hopping file)
 """
+with_spin=False      #use only with soc hamiltonian
 
-option=0
+option=5
 """
 option: switch calculation modes
  0: band plot
@@ -28,29 +29,37 @@ option: switch calculation modes
 10: calc cycrotron mass
 """
 
-N=200                #kmesh btween symmetry points
-FSmesh=80            #kmesh for option in {1,2,3,5,6}
+#k-point settings
+N=400                #kmesh btween symmetry points
+FSmesh=40            #kmesh for option in {1,2,3,5,6}
 wmesh=400            #w-mesh for dos and spectrum
 
 eta=2.0e-2           #eta for green function
+sw_dec_axis=False    #transform Cartesian axis
+fill=1.00            #band filling
+brav=5               #0:sc, 1,2: bc, 3: orthorhombic, 4: monoclinic 5: fcc 6: hexa
+sw_calc_mu =False    #switch calc mu or not
+temp=3*8.62e-3       #temp if sw_tdep True upper limit of T 100K~8.62e-3eV
+
+sw_color=True        #plot band or FS with orbital weight
+sw_unit=True
+mu0=10.58            #chemical potential if you want to fix
+mass=1.0             #effective mass (reduce band width)
 de=1.e-4             #delta for spectrum
 kz=np.pi*0.          #kz for option 1 and 6
-sw_dec_axis=True     #transform Cartesian axis
-sw_color=True        #plot band or FS with orbital weight
-with_spin=False      #use only with soc hamiltonian
-mass=1.0             #effective mass (reduce band width)
-sw_unit=True
 
-sw_calc_mu =True     #switch calc mu or not
-fill=5.50            #band filling
-brav=5               #0:sc, 1,2: bc, 3: orthorhombic, 4: monoclinic 5: fcc 6: hexa
-temp=3*8.62e-3       #temp if sw_tdep True upper limit of T 100K~8.62e-3eV
-mu=0.0               #chemical potential
+#parameters for option 0 or 5
+sw_T_range=True      #plot figure with pmkbT range around mu
 
+#parameters for option 7
 sw_tdep=True         #switch calc. t dep conductivity or not
-temp_min=8.62e-3     #lower limit of T
-tstep=3              #range of temp step
+temp_min=5*8.62e-5   #lower limit of T
+tstep=60             #range of temp step
 sw_tau=0             #0:constant tau, 1:w dep. tau
+sw_mu_const = True
+sw_out_Tdep = True
+out_name='sigma.txt'
+outputs='sigma[0,0]'  #set output various
 
 """
 lattice parameters
@@ -66,7 +75,7 @@ deg=np.array([90.,90.,90.])
 orbital number with color plot [R,G,B] 
 if you merge some orbitals input orbital list in elements
 """
-olist=[[0],[1,4],[2,3,5]]
+olist=[0,1,2]
 
 #----------import modules without scipy-------------
 import scipy as sc
@@ -330,6 +339,9 @@ def plot_band(eig,spl,xticks,uni,ol):
     plt.ylim(eig.min()*1.1,eig.max()*1.1)
     plt.xlim(0,spl.max())
     plt.axhline(0.,ls='--',lw=0.25,color='black')
+    if sw_T_range:
+        plt.axhline(temp,ls='--',lw=0.25,color='black')
+        plt.axhline(-temp,ls='--',lw=0.25,color='black')
     plt.xticks(xticks,xlabel)
     plt.show()
 
@@ -345,8 +357,8 @@ def plot_spectrum(ham,klen,xticks,mu,sw_tau,eta0=5.e-2,de=100,smesh=200,etamax=4
     smesh: contor mesh (optional, default=200)
     """
     emax,emin=gen_eig(ham,mass,mu,False)
-    w_orig=np.linspace(emin*1.1,emax*1.1,de)
     if rank==0:
+        w_orig=np.linspace(emin*1.1,emax*1.1,de)
         sendbuf=w_orig
         cks=divmod(sendbuf.size,size)
         count=np.array([cks[0]+1 if i<cks[1] else cks[0] for i in range(size)])
@@ -369,7 +381,6 @@ def plot_spectrum(ham,klen,xticks,mu,sw_tau,eta0=5.e-2,de=100,smesh=200,etamax=4
     G=np.array([[-sclin.inv((ww+mu+et*1j)*np.identity(no)-h) for h in ham] for ww,et in zip(w,eta)])
     trG=np.array([[np.trace(gg).imag/(no*no) for gg in g] for g in G])
     sendbuf=trG.flatten()
-    w=w_orig
     if rank==0:
         count=count*nk
         recvbuf=np.empty(count.sum(),dtype='f8')
@@ -380,8 +391,12 @@ def plot_spectrum(ham,klen,xticks,mu,sw_tau,eta0=5.e-2,de=100,smesh=200,etamax=4
     comm.Bcast(count,root=0)
     comm.Gatherv(sendbuf,[recvbuf,count,displ,MPI.DOUBLE],root=0)
     if rank==0:
+        w=w_orig
         sp,w=np.meshgrid(klen,w)
         trG=recvbuf.reshape(de,nk)
+        if sw_T_range:
+            dfermi=0.25*(1.-np.tanh(0.5*(w)/temp)**2)/temp
+            trG=trG*dfermi
         plt.hot()
         plt.contourf(sp,w,trG,smesh)
         plt.colorbar()
@@ -748,11 +763,15 @@ def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
 
 def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,tstep,sw_tau,idelta=1e-3,tau0=100):
     """
-    this function calculates conductivity at tau==1 from Boltzmann equation in metal
+    this function calculates conductivity from Boltzmann equation in metal
+    if you set sw_tau we set tau=1fs. else we take tau=1/(1/tau_0+w**2) w:energy
     """
     def calc_Kn(eig,veloc,temp,mu,tau):
-        dfermi=0.25*(1.-np.tanh(0.5*(eig-mu)/temp)**2)/temp
-        #Kn=sum_k(v*v*(e-mu)^n*(-df/de))
+        """
+        this function obtain Kn
+        in here, Kn_ij=sum_k(v_ki*v_kj*(e_k-mu)^n*(-df(e_k)/de)) 
+        """
+        dfermi=0.25*(1.-np.tanh(0.5*(eig-mu)/temp)**2)/temp #-df(e_k)/de
         K0=np.array([[(vk1*vk2*dfermi*tau).sum() for vk2 in veloc.T] for vk1 in veloc.T])
         K1=np.array([[(vk1*vk2*(eig-mu)*dfermi*tau).sum() for vk2 in veloc.T] for vk1 in veloc.T])
         K2=np.array([[(vk1*vk2*(eig-mu)**2*dfermi*tau).sum() for vk2 in veloc.T] for vk1 in veloc.T])
@@ -771,8 +790,9 @@ def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,
         tau_u=1.
     itau0=1./tau0
     gsp=(1.0 if with_spin else 2.0) #spin weight
-    Nk,count,k_mpi=gen_klist(mesh)
     Vuc=sclin.det(avec)*1e-30 #unit is AA^3. Nk*Vuc is Volume of system.
+
+    Nk,count,k_mpi=gen_klist(mesh)
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass
     veloc=np.array([get_vec(k,rvec,ham_r,ndegen,avec) for k in k_mpi])/mass
@@ -783,7 +803,7 @@ def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,
     tdf=np.array([[[(v1*v2*tau_u/((w-eig)**2+idelta**2)).sum() for w in wlength]
                    for v1 in veloc.T] for v2 in veloc.T])
     tdf=gsp*comm.allreduce(tdf,MPI.SUM)/Nk
-
+    iNV=1./(Nk*Vuc)
     if rank==0:
         f=open('tdf.dat','w')
         for w,td in zip(wlength,tdf.T):
@@ -793,22 +813,25 @@ def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,
                     f.write('%10.3e '%(dd))
             f.write('\n')
         f.close()
+        if sw_out_Tdep:
+            f=open(out_name,'w')
     if sw_tdep:
         temp0=np.linspace(temp_min,temp_max,tstep)
     else:
         temp0=[temp_max]
     for temp in temp0:
-        mu=calc_mu(eig,Nk,fill,temp)
+        itemp=1./temp
+        mu=(mu0 if sw_mu_const else calc_mu(eig,Nk,fill,temp))
         if sw_tau==0:
             tauw=eig*0+1.
         elif sw_tau==1:
             tauw=1./(itau0+(eig-mu)**2)
         K0,K1,K2=calc_Kn(eig,veloc,temp,mu,tauw)
-        sigma=gsp*tau_u*eC*K0/(Nk*Vuc)          #sigma=e^2K0 (A/Vm) :1eC is cannceled with eV>J
-        #kappa=gsp*tau_u*kb*eC*K2/(temp*Nk*Vuc)  #kappa=K2/T (W/Km) :eC(kb) appears with converting eV>J(eV>K)
-        kappa=gsp*tau_u*kb*eC*(K2-K1.dot(sclin.inv(K0).dot(K1)))/(temp*Nk*Vuc)
-        sigmaS=gsp*tau_u*kb*eC*K1/(temp*Nk*Vuc) #sigmaS=eK1/T (A/mK)
-        Seebeck=-kb*sclin.inv(K0).dot(K1)/temp   #S=K0^(-1)K1/eT (V/K) :kb appears with converting eV>K
+        sigma=gsp*tau_u*eC*K0*iNV          #sigma=e^2K0 (A/Vm) :1eC is cannceled with eV>J
+        #kappa=gsp*tau_u*kb*eC*K2*iNV*itemp #kappa=K2/T (W/Km) :eC(kb) appears with converting eV>J(eV>K)
+        kappa=gsp*tau_u*kb*eC*(K2-K1.dot(sclin.inv(K0).dot(K1)))*iNV*itemp #kappa=(K2-K1K0^-1K1)/T
+        sigmaS=gsp*tau_u*kb*eC*K1*iNV*itemp #sigmaS=eK1/T (A/mK)
+        Seebeck=-kb*sclin.inv(K0).dot(K1)*itemp #S=K0^(-1)K1/eT (V/K) :kb appears with converting eV>K
         Pertier=K1.dot(sclin.inv(K0))           #pi=K1K0^(-1)/e (V:J/C) :eC is cannceled with eV>J
         PF=sigmaS.dot(Seebeck)
 
@@ -835,6 +858,11 @@ def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,
             print(kb*kappa/(sigma*temp))
             print('Power Factor')
             print(PF.round(10))
+            if sw_out_Tdep:
+                f.write('%d, %e\n'%(int(temp/kb),eval(outputs)))
+    if rank==0:
+        if sw_out_Tdep:
+            f.close()
 
 def get_carrier_num(mesh,rvec,ham_r,ndegen,mu):
     Nk,count,k_mpi=gen_klist(mesh)
@@ -1174,11 +1202,11 @@ def get_hams(klist,rvec,ham_r,ndegen,no):
 def main():
     no,nr,rvec,ham_r,ndegen=import_hamiltonian(fname,sw_inp)
 
-    if sw_calc_mu and option!=7:
+    if sw_calc_mu:
         mu=get_mu(fill,rvec,ham_r,ndegen,temp)
     else:
         try:
-            mu
+            mu=mu0
         except NameError:
             mu=get_mu(fill,rvec,ham_r,ndegen,temp)
     if option in {2,3,4}:
