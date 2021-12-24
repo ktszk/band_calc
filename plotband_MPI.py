@@ -13,7 +13,7 @@ else: Hopping.dat file (ecalj hopping file)
 """
 with_spin=False      #use only with soc hamiltonian
 
-option=5
+option=1
 """
 option: switch calculation modes
  0: band plot
@@ -289,8 +289,8 @@ def mk_klist(k_list,N,bvec):
         tmp2=np.linspace(0,dkv_length,N)+maxsplen
         maxsplen=tmp2.max()
         xticks+=[tmp2[0]]
-        klist+=list(tmp[:-1])
-        splen+=list(tmp2[:-1])
+        klist+=tmp[:-1].tolist()
+        splen+=tmp2[:-1].tolist()
     klist+=[2*np.pi*np.array(k_list[-1])]
     splen+=[maxsplen+dkv_length/N]
     xticks+=[splen[-1]]
@@ -461,7 +461,7 @@ def mk_kf(mesh,rvec,ham_r,ndegen,mu,kz=0):
         for i,e in enumerate(eig):
             if(e.max()*e.min() < 0. ):
                 cont=sk.find_contours(e.reshape(mesh+1,mesh+1),0)
-                ct=[[np.array(list(c)+[kz]) for c in (cc-mesh/2)*2*np.pi/mesh] for cc in cont]
+                ct=[[np.array(c.tolist()+[kz]) for c in (cc-mesh/2)*2*np.pi/mesh] for cc in cont]
                 fsband.append(i)
                 v2.append(ct)
     else:
