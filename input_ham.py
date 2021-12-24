@@ -11,7 +11,8 @@ sw_ndegen: import_hop only, select lead ndegen from ndegen.txt (True) or not (Fa
 def import_hop(fname,sw_ndegen=False,sw_hoplist=True):
     rvec=np.loadtxt(fname+'/irvec.txt')
     nr=rvec[:,0].size
-    tmp=np.array([complex(float(tp[0]),float(tp[1])) for tp in [f.strip(' ()\n').split(',') for f in open(fname+'/ham_r.txt','r')]])
+    tmp=np.array([complex(float(tp[0]),float(tp[1])) 
+                  for tp in [f.strip(' ()\n').split(',') for f in open(fname+'/ham_r.txt','r')]])
     no=int(np.sqrt(tmp.size/nr))
     ham_r=(tmp.reshape(nr,no,no) if sw_hoplist else np.reshape(tmp,(nr,no*no)).T.reshape(no,no,nr))
     ndegen=(np.loadtxt(fname+'/ndegen.txt') if sw_ndegen else np.ones(nr))
