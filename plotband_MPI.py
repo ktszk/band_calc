@@ -2,8 +2,8 @@
 #-*- coding:utf-8 -*-
 import numpy as np
 
-fname='Pb'           #hamiltonian file name
-sw_inp=2             #input hamiltonian format
+fname='000AsP.input' #hamiltonian file name
+sw_inp=0             #setting input hamiltonian format
 """
 sw_inp: switch input hamiltonian's format
 0: .input file
@@ -13,7 +13,7 @@ else: Hopping.dat file (ecalj hopping file)
 """
 with_spin=False      #use only with soc hamiltonian
 
-option=1
+option=0
 """
 option: switch calculation modes
  0: band plot
@@ -36,9 +36,9 @@ wmesh=400            #w-mesh for dos and spectrum
 
 eta=2.0e-2           #eta for green function
 sw_dec_axis=False    #transform Cartesian axis
-fill=1.00            #band filling
-brav=5               #0:sc, 1,2: bc, 3: orthorhombic, 4: monoclinic 5: fcc 6: hexa
-sw_calc_mu =False    #switch calc mu or not
+fill=3.00            #band filling
+brav=0               #0:sc, 1,2: bc, 3: orthorhombic, 4: monoclinic 5: fcc 6: hexa
+sw_calc_mu =True     #switch calc mu or not
 temp=3*8.62e-3       #temp if sw_tdep True upper limit of T 100K~8.62e-3eV
 
 sw_color=True        #plot band or FS with orbital weight
@@ -67,15 +67,16 @@ alatt: lattice length a,b,c
 deg: lattice degree alpha,beta,gamma
 if calc rhomb, monocli and tricli,please set deg=[alpha,beta,gamma](degree)
 """
-alatt=np.array([3.6149,3.6149,3.6149])
-#alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5])
+
+alatt=np.array([3.96*np.sqrt(2.),3.96*np.sqrt(2.),13.02*0.5])
 deg=np.array([90.,90.,90.])
 
 """
+olist: list
 orbital number with color plot [R,G,B] 
-if you merge some orbitals input orbital list in elements
+if you merge some orbitals to each color, enter a list of orbital for each element of the olist
 """
-olist=[0,1,2]
+olist=[0,[1,2],3]
 
 #----------import modules without scipy-------------
 import scipy as sc
@@ -474,7 +475,7 @@ def gen_3d_fs_plot(mesh,rvec,ham_r,ndegen,mu,avec,BZ_faces,surface_opt=0):
     This function plot 3D Fermi Surface
     argument:
     mesh: k-grid mesh size
-    rvec,ham_r,ndegen: model hamiltonian
+    rvec,ham_r,ndegen: hopping parameters of model hamiltonian
     mu: chemical potential
     surface_opt: switch of surface color 1:orbital weights, 2:size of velocities
     """
@@ -865,6 +866,13 @@ def get_conductivity(sw_tdep,mesh,rvec,ham_r,ndegen,avec,fill,temp_max,temp_min,
             f.close()
 
 def get_carrier_num(mesh,rvec,ham_r,ndegen,mu):
+    """
+    This function obtains the carrier number from the sum of k-points above or below the chemical potential.
+    argments:
+    mesh: k-grid mesh size
+    rvec,ham_r,ndegen: hopping parameters of model hamiltonian
+    mu: chemical potential
+    """
     Nk,count,k_mpi=gen_klist(mesh)
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     eig=np.array([sclin.eigvalsh(h) for h in ham]).T/mass-mu
@@ -878,6 +886,16 @@ def get_carrier_num(mesh,rvec,ham_r,ndegen,mu):
             print(i+1,round(num_hole,4),round(num_particle,4))
 
 def plot_dos(mesh,rvec,ham_r,ndegen,mu,no,eta,de=1000):
+    """
+    This function calculate Dos
+    argments:
+    mesh: k-grid mesh size
+    rvec,ham_r,ndegen: hopping parameters of model hamiltonian
+    mu: chemical potential
+    no: number of orbitals
+    eta: dumping factor
+    de: energy mesh (optional: default is 1000)
+    """
     Nk,count,k_mpi=gen_klist(mesh)
     ham=np.array([get_ham(k,rvec,ham_r,ndegen) for k in k_mpi])
     eig=np.array([sclin.eigvalsh(h) for h in ham])-mu
@@ -1165,6 +1183,13 @@ def import_hamiltonian(fname,sw_inp):
     return(no,nr,rvec,ham_r,ndegen)
 
 def get_hams(klist,rvec,ham_r,ndegen,no):
+    """
+    This function obtains hamiltonian Hk
+    argments:
+    klist: the list of k-points
+    rvec,ham_r,ndegen: hopping parameter of model Hamiltonian
+    no: the number of orbitals
+    """
     Nk=len(klist)
     if rank==0:
         sendbuf=klist.flatten()
@@ -1285,7 +1310,7 @@ def main():
 #--------------------------main program-------------------------------
 if __name__=="__main__":
     main()
-__license__="""Copyright (c) 2018-2019 K. Suzuki
+__license__="""Copyright (c) 2018-2024 K. Suzuki
 Released under the MIT license
 http://opensource.org/licenses/mit-license.php
 """

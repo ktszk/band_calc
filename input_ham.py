@@ -9,13 +9,13 @@ no is number of orbitals. nr is number of hopping matrices.
 sw_ndegen: import_hop only, select lead ndegen from ndegen.txt (True) or not (False) default False
 """
 def import_hop(fname,sw_ndegen=False,sw_hoplist=True):
-    rvec=np.loadtxt(fname+'/irvec.txt')
+    rvec=np.loadtxt(f'{fname}/irvec.txt')
     nr=rvec[:,0].size
     tmp=np.array([complex(float(tp[0]),float(tp[1])) 
-                  for tp in [f.strip(' ()\n').split(',') for f in open(fname+'/ham_r.txt','r')]])
+                  for tp in [f.strip(' ()\n').split(',') for f in open(f'{fname}/ham_r.txt','r')]])
     no=int(np.sqrt(tmp.size/nr))
     ham_r=(tmp.reshape(nr,no,no) if sw_hoplist else np.reshape(tmp,(nr,no*no)).T.reshape(no,no,nr))
-    ndegen=(np.loadtxt(fname+'/ndegen.txt') if sw_ndegen else np.ones(nr))
+    ndegen=(np.loadtxt(f'{fname}/ndegen.txt') if sw_ndegen else np.ones(nr))
     return(rvec,ndegen,ham_r,no,nr)
 
 def import_out(fname,sw_hoplist=True):
@@ -28,7 +28,7 @@ def import_out(fname,sw_hoplist=True):
     return(rvec,ndegen,ham_r,no,nr)
 
 def import_hr(name,sw_hoplist=True):
-    tmp=[f.split() for f in open('%s_hr.dat'%name,'r')]
+    tmp=[f.split() for f in open(f'{name}_hr.dat','r')]
     no, nr=int(tmp[1][0]), int(tmp[2][0])
     c2,tmp1=3,[]
     while not len(tmp1)==nr:
@@ -43,7 +43,7 @@ def import_hr(name,sw_hoplist=True):
     return(rvec,ndegen,ham_r,no,nr)
 
 def import_Hopping(name,sw_hoplist=True,sw_axis=False):
-    tmp=[f.split() for f in open('%s/Hopping.dat'%name,'r')]
+    tmp=[f.split() for f in open(f'{name}/Hopping.dat','r')]
     axis=np.array([[float(tp) for tp in tpp] for tpp in tmp[1:4]])
     no,nr=int(tmp[4][0]),int(tmp[4][1])
     ndegen=np.ones(nr,dtype='f8')
@@ -56,3 +56,16 @@ def import_Hopping(name,sw_hoplist=True,sw_axis=False):
         return(rvec,ndegen,ham_r,no,nr,axis)
     else:
         return(rvec,ndegen,ham_r,no,nr)
+
+def import_MLO_hoppings(name):
+    Ry2eV=13.6
+    tmp=[f.split() for f in open(f'{name}','r')]
+    tmp1=np.array([[float(t) for t in tp] for tp in tmp])
+    no=int(tmp1[:,0].max())
+    nr=int(len(tmp1)/(no*no))
+    tmp=np.array([complex(tp[5],tp[6]) for tp in tmp1])
+    tmpS=np.array([complex(tp[7],tp[8]) for tp in tmp1])
+    rvec=np.array([tmp1[i][2:5] for i in range(nr)])
+    ham_r=tmp.reshape((no*no,nr)).T.reshape((nr,no,no)).round(6).copy()*Ry2eV
+    S_r=tmpS.reshape((no*no,nr)).T.reshape((nr,no,no)).round(6).copy()*Ry2eV
+    return rvec,ham_r,S_r,no,nr
