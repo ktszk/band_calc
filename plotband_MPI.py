@@ -97,31 +97,31 @@ ihbar=1./scconst.physical_constants['Planck constant over 2 pi in eV s'][0]*1.0e
 if brav==0:
     Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[ 0.,0., 1.]]) #rotation matrix for dec. to primitive vector
     k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]] #coordinate of sym. points 2
-    xlabel=['Z','$\Gamma$','X','Z','$\Gamma$'] #sym. points name  1
+    xlabel=['Z',r'$\Gamma$','X','Z',r'$\Gamma$'] #sym. points name  1
     #k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,.5,.0],[0.,0.,0.],[.5,.5,0.]] #3 
-    #xlabel=['Z','$\Gamma$','X','M','Y','$\Gamma$','M'] #sym. points name 3
+    #xlabel=['Z',r'$\Gamma$','X','M','Y',r'$\Gamma$','M'] #sym. points name 3
 elif brav in {1,2}: #bcc
     Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[-.5,-.5, .5]] if brav==1 else
                   [[ .5, -.5, .5],[ .5, .5, .5],[-.5,-.5, .5]])
     k_list=([[0.,0.,.5],[0., 0., 0.],[.5, .5, -.5],[1.,0.,-.5],[0.,0.,0.]] if brav==1 else
             [[.5,.5,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5,-.5],[0.,0.,0.]])
-    xlabel=['Z','$\Gamma$','X','M','$\Gamma$']
+    xlabel=['Z',r'$\Gamma$','X','M',r'$\Gamma$']
 elif brav==3: #ortho
     Arot=np.array([[ .5, .5, 0.],[-.5, .5, 0.],[ 0.,0., 1.]])
     k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,.5,0.],[0.,0.,0.]]
-    xlabel=['Z','$\Gamma$','X','M','Y','$\Gamma$']
+    xlabel=['Z',r'$\Gamma$','X','M','Y',r'$\Gamma$']
 elif brav==4: #monocli
     Arot=np.array([[ 1., 0., 0.],[ 0., 1., 0.],[np.cos(deg[1]),0., np.sin(deg[1])]])
     k_list=[[0.,0.,.5],[0., 0., 0.],[.5, 0., 0.],[.5, .5, 0.],[0.,0.,0.]]
-    xlabel=['Z','$\Gamma$','X','Z','$\Gamma$']
+    xlabel=['Z',r'$\Gamma$','X','Z',r'$\Gamma$']
 elif brav==5: #fcc
     Arot=np.array([[-.5,0.,.5],[0.,.5,.5],[-.5,.5,0.]])
     k_list=[[0.,0.,0.],[.5, 0., .5],[1., 0., 0.],[.5, .5, .5],[.5,.25,.75],[0.,0.,0.]]
-    xlabel=['$\Gamma$','X','$\Gamma$','L','W','$\Gamma$']
+    xlabel=[r'$\Gamma$','X',r'$\Gamma$','L','W',r'$\Gamma$']
 elif brav==6: #hexa
     Arot=np.array([[ 1., 0., 0.],[-.5, .5*np.sqrt(3.), 0.],[ 0.,0., 1.]])
     k_list=[[0.,0.,0.],[2./3.,-1./3., 0.],[.5, 0., 0.],[0., 0., 0.],[0.,0.,.5]]
-    xlabel=['$\Gamma$','K','M','$\Gamma$','Z']
+    xlabel=[r'$\Gamma$','K','M',r'$\Gamma$','Z']
 elif brav==7: #trigonal
     cosg=np.cos(np.pi*deg[2]/180.)
     tx=np.sqrt((1.-cosg)*.5)
@@ -129,7 +129,7 @@ elif brav==7: #trigonal
     tz=np.sqrt((1.+2*cosg)/3.)
     Arot=np.array([[tx,-ty,tz],[0,2*ty,tz],[-tx,-ty,tz]])
     k_list=[[0.,0.,0.],[.5,0.,.5],[.5,0.,0.],[0.,0.,0.],[.5,.5,.5]]
-    xlabel=['$\Gamma$','K','M','$\Gamma$','Z']
+    xlabel=[r'$\Gamma$','K','M',r'$\Gamma$','Z']
 #----------------define functions-------------------
 def get_ham(k,rvec,ham_r,ndegen,out_phase=False):
     """
@@ -682,8 +682,8 @@ def plot_vec2(veloc,klist):
     plt.jet()
     plt.xlim(-np.pi,np.pi)
     plt.ylim(-np.pi,np.pi)
-    plt.xticks([-np.pi,0,np.pi],['-$\pi$','0','$\pi$'])
-    plt.yticks([-np.pi,0,np.pi],['-$\pi$','0','$\pi$'])
+    plt.xticks([-np.pi,0,np.pi],[r'-$\pi$','0',r'$\pi$'])
+    plt.yticks([-np.pi,0,np.pi],[r'-$\pi$','0',r'$\pi$'])
     plt.colorbar(format='%.2e')
     plt.show()
 
@@ -729,8 +729,8 @@ def plot_FS(uni,klist,ol,ncut=8):
                 plt.plot([k1[0],k2[0]],[k1[1],k2[1]],c=clst)
     plt.xlim(-np.pi,np.pi)
     plt.ylim(-np.pi,np.pi)
-    plt.xticks([-np.pi,0,np.pi],['-$\pi$','0','$\pi$'])
-    plt.yticks([-np.pi,0,np.pi],['-$\pi$','0','$\pi$'])
+    plt.xticks([-np.pi,0,np.pi],[r'-$\pi$','0',r'$\pi$'])
+    plt.yticks([-np.pi,0,np.pi],[r'-$\pi$','0',r'$\pi$'])
     plt.show()
 
 def plot_FS_cont(eig,X,Y):
@@ -742,8 +742,8 @@ def plot_FS_cont(eig,X,Y):
             plt.contour(X,Y,en.reshape(Nk,Nk),levels=[0.],colors='black')
     plt.xlim(-np.pi,np.pi)
     plt.ylim(-np.pi,np.pi)
-    plt.xticks([-np.pi,0,np.pi],['-$\pi$','0','$\pi$'])
-    plt.yticks([-np.pi,0,np.pi],['-$\pi$','0','$\pi$'])
+    plt.xticks([-np.pi,0,np.pi],[r'-$\pi$','0',r'$\pi$'])
+    plt.yticks([-np.pi,0,np.pi],[r'-$\pi$','0',r'$\pi$'])
     plt.show()
 
 def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
@@ -755,9 +755,9 @@ def plot_FSsp(ham,mu,X,Y,eta=5.0e-2,smesh=50):
     fig=plt.figure()
     ax=fig.add_subplot(111,aspect='equal')
     ax.set_xticks([-np.pi,0,np.pi])
-    ax.set_xticklabels(['-$\pi$','0','$\pi$'])
+    ax.set_xticklabels([r'-$\pi$','0',r'$\pi$'])
     ax.set_yticks([-np.pi,0,np.pi])
-    ax.set_yticklabels(['-$\pi$','0','$\pi$'])
+    ax.set_yticklabels([r'-$\pi$','0',r'$\pi$'])
     cont=ax.contourf(X,Y,trG,smesh,cmap=plt.jet())
     fig.colorbar(cont)
     plt.show()
